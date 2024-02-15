@@ -15,52 +15,70 @@ const db = mysql.createConnection({
     database: "restro",
 });
 
+app.use('/static', express.static('public'));
+
 // app.use(bodyParser.urlencoded({extended:true}));
 
 // root site
 app.get('/', function(req,res){
-    res.send('hello');
+    res.sendFile(__dirname + '/public/home.html');
 });
 
-app.post("/login",(req,res)=>{
+app.get('/')
+
+
+app.post("/api/login",(req,res)=>{
     const mobile = parseInt(req.body.mobile);
     db.connect((err)=>{
         if(err) console.log("Connection Error: ",err);
         db.query(
-            `SELECT id, name, username, email, mobile FROM users WHERE mobile=${mobile};`,(err,request,fields)=>{
+            `SELECT id, name, username, email, mobile FROM users WHERE mobile=${mobile};`,(err,result,fields)=>{
             db.release();
             if(err) res.send('Query Error', err);
-                res.json(request);
+                res.json(result);
             }
         );
     });
 });
 
-app.get("/restaurants", (req, res) => {
+app.get("/api/user/:id", (req,res)=>{
+  const id = parseInt(req.params.id);
+  db.connect((err)=> {
+    if(err) console.log('Connection Error: ',err);
+    db.query(
+      `SELECT * FROM users WHERE id=${id};`,(err,result,fields)=>{
+        if(err) res.send(err);
+        res.json(result);
+      }
+    )
+  });
+});
+
+app.get("/api/restaurants", (req, res) => {
     db.connect((err) => {
       if (err) console.log("Connection error", err);
       db.query(
-        `SELECT * FROM restaurant;`,(err, request, fields) => {
+        `SELECT * FROM restaurant;`,(err, result, fields) => {
           if (err) res.send(err);
           res.json({
-            length:request.length,
-            data:request
+            length:result.length,
+            data:result
           });
         }
       );
     });
   });
 
-app.get('/menu/:id',(req,res)=>{
+app.get('/api/menu/:id',(req,res)=>{
   const id = req.params.id;
   db.connect((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.query(
-      `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,request,fields)=>{
+      `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result,fields)=>{
         if(err) res.send(err);
         res.json({
-          length:request.length,
-          data:request
+          length:result.length,
+          data:result
         });
       }
     );
