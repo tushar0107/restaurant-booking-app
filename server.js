@@ -17,7 +17,8 @@ const db = mysql.createConnection({
 
 app.use('/static', express.static('public'));
 
-// app.use(bodyParser.urlencoded({extended:true}));
+app.use(bodyParser.urlencoded({extended:false}));
+app.use(bodyParser.json());
 
 // root site
 app.get('/', function(req,res){
@@ -27,18 +28,35 @@ app.get('/', function(req,res){
 app.get('/')
 
 
-app.post("/api/login",(req,res)=>{
-    const mobile = parseInt(req.body.mobile);
-    db.connect((err)=>{
-        if(err) console.log("Connection Error: ",err);
-        db.query(
-            `SELECT id, name, username, email, mobile FROM users WHERE mobile=${mobile};`,(err,result,fields)=>{
-            db.release();
-            if(err) res.send('Query Error', err);
-                res.json(result);
-            }
-        );
-    });
+app.post("/api/login", (req, res) => {
+  const mobile = parseInt(req.body.mobile);
+  db.connect((err) => {
+      if (err) console.log("Connection Error: ", err);
+      else {
+          db.query(
+              `SELECT id, first_name, last_name, address, mobile, type FROM users WHERE mobile=${mobile};`,
+              (err, result, fields) => {
+                  if (err) console.log('Query Error:', err);
+                  else res.send(result);
+              }
+          );
+      }
+  });
+});
+
+app.post("/api/register", (req,res)=>{
+  const data = req.body;
+  db.connect((err)=>{
+    if(err) console.log('Connection Error: ',err);
+    else {
+      db.query(
+        `INSERT INTO users (first_name, last_name, address, mobile, type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.type}','${data.password}');`,(err, result)=>{
+          if(err) console.log('Query Error: ',err);
+          else res.send(result); 
+        }
+      );
+    }
+  });
 });
 
 app.get("/api/user/:id", (req,res)=>{
@@ -47,8 +65,8 @@ app.get("/api/user/:id", (req,res)=>{
     if(err) console.log('Connection Error: ',err);
     db.query(
       `SELECT * FROM users WHERE id=${id};`,(err,result,fields)=>{
-        if(err) res.send(err);
-        res.json(result);
+        if(err) console.log(err);
+        res.send(result);
       }
     )
   });
@@ -84,6 +102,41 @@ app.get('/api/menu/:id',(req,res)=>{
     );
   });
 });
+
+app.post('/api/booking',(req,res)=>{
+  const data = req.body;
+  db.connect((err)=>{
+    if (err) console.log("Connection Error: ", err);
+    db.query(
+      `INSERT INTO bookings (user_id, restaurant_id, table_no, details, guests, booking_date, visit_date, visit_time) 
+      VALUES (${data.user_id}, 
+        ${data.restaurant_id}, 
+        ${data.table_no}, 
+        '${data.details}', 
+        ${data.guests}, 
+        '${data.booking_date}',
+        '${data.visit_date}', 
+        '${data.visit_time}');`,(err,result,fields)=>{
+        if(err) res.send(err);
+        res.json({
+          data:result
+        });
+      }
+    );
+  });
+});
+
+// app.post('/api/add-review', (req,res)=>{
+//   const data = req.body;
+//   db.connect((err)=>{
+//     if(err) console.log('Connection Error: ',err);
+//     else{
+//       db.query(
+//         `INSERT INTO reviews (user_id, restaurant_id, review, )`
+//       )
+//     }
+//   })
+// });
 
 
 app.listen(port,function(){
