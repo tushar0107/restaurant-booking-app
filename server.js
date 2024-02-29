@@ -1,20 +1,20 @@
 const express = require('express');
 const http = require('http');
 const {Pool} = require('pg');
-const {port,host,database, password} =require('./config');
+//const {port,host,database, password} =require('./config');
 
 const app = express();
 const bodyParser = require('body-parser');
 
-// const port = process.env.PORT;
+const port = process.env.PORT;
 
 // connection to database on render.com
 const db = new Pool({
   type:'postgres',
   user: 'tushar',
-  host: host,
-  database: database,
-  password: password,
+  host: process.env.HOST,
+  database: process.env.DATABASE,
+  password: process.env.PASSWORD,
   port: 5432,
   ssl:true
 });
