@@ -1,12 +1,12 @@
 const express = require('express');
 const http = require('http');
 const {Pool} = require('pg');
-//const {port,host,database, password} =require('./config');
+const {port,host,database, password} =require('./config');
 
 const app = express();
 const bodyParser = require('body-parser');
 
-const port = process.env.PORT;
+// const port = process.env.PORT;
 
 // connection to database on render.com
 const db = new Pool({
@@ -34,7 +34,7 @@ db.query(`CREATE TABLE IF NOT EXISTS users (
 });
 
 //create restaurant table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS restaurant (
+db.query(`CREATE TABLE IF NOT EXISTS restaurants (
   id SERIAL PRIMARY KEY,
   name VARCHAR(50) NOT NULL,
   address VARCHAR(200) NOT NULL,
@@ -125,7 +125,7 @@ app.post("/api/login", (req, res) => {
       if (err) console.log("Connection Error: ", err);
       else {
           db.query(
-              `SELECT id, first_name, last_name, address, mobile, type FROM users WHERE mobile=${mobile};`,
+              `SELECT id, first_name, last_name, address, mobile, email type FROM users WHERE mobile=${mobile};`,
               (err, result, fields) => {
                   if (err) console.log('Query Error:', err);
                   else res.send(result.rows);
@@ -137,11 +137,12 @@ app.post("/api/login", (req, res) => {
 
 app.post("/api/register", (req,res)=>{
   const data = req.body;
+
   db.connect((err)=>{
     if(err) console.log('Connection Error: ',err);
     else {
       db.query(
-        `INSERT INTO users (first_name, last_name, address, mobile, type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.type}','${data.password}');`,(err, result)=>{
+        `INSERT INTO users (first_name, last_name, address, mobile, email, type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.type}','${data.password}');`,(err, result)=>{
           if(err) console.log('Query Error: ',err);
           else res.send(result.rows); 
         }
@@ -163,6 +164,69 @@ app.get("/api/user/:id", (req,res)=>{
   });
 });
 
+app.post("/api/register-restaurant", (req,res)=>{
+  const data = req.body;
+  //Create SQL query with parameterized values
+  const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location) 
+                          VALUES ('${data.name}','${data.address}','${data.city}','${data.state}',${data.phone1},
+                          ${data.phone2 ? data.phone2: null},
+                          '${data.type}',
+                          '${data.ethnicity ? data.ethnicity:null}',
+                          ${data.table_capacity},
+                          '${data.service_type}',
+                          '${data.location?data.location:null}');`
+  db.connect((err)=>{
+    if(err){
+      console.log("Connection Error: ",err);
+      return res.status(500).json({error: "Database Connection error"});
+    }
+  db.query(sqlQuery,(err,result)=>{
+    if(err){console.log('Query Error: ',err);return res.status(500).json({error:"Database Query error"});}
+    else{
+      res.json({result});
+    }
+  });
+
+  })
+});
+
+
+app.post('/api/update-restaurant', (req,res)=>{
+  const data = req.body;
+  const sqlQuery = `UPDATE restaurants SET ${data.name ? `name='${data.name}',` : ''}
+                                           ${data.address ? `address='${data.address}',` : ''}
+                                           ${data.city ? `city='${data.city}',`:''}
+                                           ${data.state ? `state='${data.state}',`:''}
+                                           ${data.phone1 ? `phone1=${data.phone1},`:''}
+                                           ${data.phone2 ? `phone2=${data.phone2},`:''}
+                                           ${data.type ? `type='${data.type}',`:''}
+                                           ${data.ethnicity ? `ethnicity='${data.ethnicity}',`:''}
+                                           ${data.table_capacity ? `table_capacity=${data.table_capacity},`:''}
+                                           ${data.service_type ? `service_type='${data.service_type}',`:''}
+                                           ${data.location ? `location='${data.location}'`:''}
+                                      WHERE id=${data.id};`;
+  console.log(sqlQuery);
+  db.connect((err)=>{
+    if (err) {console.log("Connection error", err);return res.status(500).json({ error: "Database connection error" });}
+  
+    db.query(sqlQuery,(err,result)=>{
+      if (err) {
+        console.log(err);
+      }
+    });
+    db.query(`SELECT * FROM restaurants WHERE id=${data.id};`,(err,result)=>{
+      if (err) {
+        console.log(err);
+        return res.status(500).json({ error: "Database query error" });
+      }else{res.json({
+        length:result.rowCount,
+        data:result.rows,
+      });}
+    });
+  });
+});
+
+
 app.get("/api/restaurants", (req, res) => {
   const filter = req.body;
   // Prepare SQL query with parameterized values
@@ -175,19 +239,19 @@ app.get("/api/restaurants", (req, res) => {
                     ${filter.service_type ? `AND service_type='${filter.service_type}'` : ''}`;
     db.connect((err) => {
       if (err) {console.log("Connection error", err);return res.status(500).json({ error: "Database connection error" });}
-      db.query(sqlQuery,(err, result, fields) => {
+      db.query(sqlQuery,(err, result) => {
           if (err) {
             console.log(err);
             return res.status(500).json({ error: "Database query error" });
-          }
-          res.json({
+          }else{res.json({
             length:result.rowCount,
             data:result.rows,
-          });
+          });}
         }
       );
     });
   });
+
 
 app.get('/api/menu/:id',(req,res)=>{
   const id = req.params.id;
