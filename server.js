@@ -1,12 +1,21 @@
 const express = require('express');
 const http = require('http');
 const {Pool} = require('pg');
-//const {port,host,database, password} =require('./config');
+var cors = require('cors');
+const dotenv = require('dotenv');
+dotenv.config();
 
 const app = express();
 const bodyParser = require('body-parser');
 
-const port = process.env.PORT;
+var whiteList = ['http://127.0.0.1:3000'];
+
+var corsOptions = {
+  origin: 'http://127.0.0.1:8000',
+  optionsSuccessStatus: 200
+}
+
+var port = process.env.PORT;
 
 // connection to database on render.com
 const db = new Pool({
@@ -135,7 +144,7 @@ app.post("/api/login", (req, res) => {
   });
 });
 
-app.post("/api/register", (req,res)=>{
+app.post("/api/register", cors(corsOptions), (req,res)=>{
   const data = req.body;
 
   db.connect((err)=>{
@@ -151,12 +160,12 @@ app.post("/api/register", (req,res)=>{
   });
 });
 
-app.get("/api/user/:id", (req,res)=>{
+app.get("/api/user/:id", cors(corsOptions), (req,res)=>{
   const id = parseInt(req.params.id);
   db.connect((err)=> {
     if(err) console.log('Connection Error: ',err);
     db.query(
-      `SELECT * FROM users WHERE id=${id};`,(err,result,fields)=>{
+      `SELECT * FROM users WHERE id=${id};`,(err,result)=>{
         if(err) console.log(err);
         res.send(result.rows);
       }
@@ -164,30 +173,62 @@ app.get("/api/user/:id", (req,res)=>{
   });
 });
 
+// this api expects (user_id, restaurant (name*,address*,city*,phone1*,phone2,type*,ethnicity*,table_capacity*,service_type*,location))
+// user_type should be 'owner' to register a restaurant
 app.post("/api/register-restaurant", (req,res)=>{
   const data = req.body;
-  //Create SQL query with parameterized values
-  const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location) 
-                          VALUES ('${data.name}','${data.address}','${data.city}','${data.state}',${data.phone1},
-                          ${data.phone2 ? data.phone2: null},
-                          '${data.type}',
-                          '${data.ethnicity ? data.ethnicity:null}',
-                          ${data.table_capacity},
-                          '${data.service_type}',
-                          '${data.location?data.location:null}');`
+
   db.connect((err)=>{
     if(err){
       console.log("Connection Error: ",err);
       return res.status(500).json({error: "Database Connection error"});
-    }
-  db.query(sqlQuery,(err,result)=>{
-    if(err){console.log('Query Error: ',err);return res.status(500).json({error:"Database Query error"});}
-    else{
-      res.json({result});
+    }else{
+      // check if the requested user is 'owner'
+      db.query(`SELECT user_type FROM users WHERE id=${data.user_id}`,(err,result)=>{
+        if(err){console.log('Query Error: ',err);return res.status(500).json({error:"Database Query error"});}
+        else{
+          if(result.rows[0].user_type=='owner'){
+            //Create SQL query with parameterized values
+            const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location) 
+                                VALUES ('${data.name}',
+                                '${data.address}',
+                                '${data.city}',
+                                '${data.state}',
+                                ${data.phone1},
+                                ${data.phone2 ? data.phone2 : null},
+                                '${data.type}',
+                                '${data.ethnicity ? data.ethnicity : null}',
+                                ${data.table_capacity},
+                                '${data.service_type}',
+                                '${data.location ? data.location : null}');`;
+            db.connect((err) => {
+              if (err) {
+                console.log("Connection Error: ", err);
+                return res
+                  .status(500)
+                  .json({ error: "Database Connection error" });
+              } else {
+                db.query(sqlQuery, (err, result) => {
+                  if (err) {
+                    console.log("Query Error: ", err);
+                    return res
+                      .status(500)
+                      .json({ error: "Database Query error" });
+                  } else {
+                    res.json({ message: "Restaurant registered" });
+                  }
+                });
+              }
+            });
+          }else{
+            res.json({data:result.rows,message:'You are not eligible to register a restaurant.'});
+          }
+        }
+      });
     }
   });
 
-  })
+  
 });
 
 
