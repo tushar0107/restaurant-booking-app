@@ -39,7 +39,7 @@ db.query(`CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(15) NOT NULL,
   user_type VARCHAR(20) CHECK (user_type IN ('admin', 'sub-admin', 'staff', 'manager', 'customer', 'owner'))
 );`,(err,result)=>{
-  if(err)console.error('Query Error',err);
+  if(err)console.error('Create users Table query Error: ',err);
 });
 
 //create restaurant table if it does not exists
@@ -55,9 +55,11 @@ db.query(`CREATE TABLE IF NOT EXISTS restaurants (
   ethnicity VARCHAR(30),
   table_capacity INT,
   service_type VARCHAR(50),
-  location VARCHAR(100)
+  location VARCHAR(100),
+  owner INT NOT NULL,
+  CONSTRAINT fk_restaurant FOREIGN KEY (owner) REFERENCES users(id)
 );`,(err,result)=>{
-  if(err)console.error('Query Error',err);
+  if(err)console.error('Create restaurants Table query Error: ',err);
 });
 
 //create menu table if it does not exists
@@ -70,7 +72,7 @@ db.query(`CREATE TABLE IF NOT EXISTS menu (
   restaurant_id INT NOT NULL,
   CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurant(id)
 );`,(err,result)=>{
-  if(err)console.error('Query Error',err);
+  if(err)console.error('Create menu Table query Error: ',err);
 });
 
 //create food Item table if it does not exists
@@ -82,7 +84,7 @@ db.query(`CREATE TABLE IF NOT EXISTS food_item (
   menu_id INT NOT NULL,
   CONSTRAINT fk_menu_id FOREIGN KEY (menu_id) REFERENCES menu(id)
 );`,(err,result)=>{
-  if(err)console.error('Query Error',err);
+  if(err)console.error('Create food_item Table query Error: ',err);
 });
 
 //create bookings table if it does not exists
@@ -96,10 +98,10 @@ db.query(`CREATE TABLE IF NOT EXISTS bookings (
   booking_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   visit_date DATE,
   visit_time TIME,
-  CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES "users" (id),
-  CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
+  CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
 );`,(err,result)=>{
-  if(err)console.error('Query Error',err);
+  if(err)console.error('Create bookings Table query Error: ',err);
 });
 
 //create reviews table if it does not exists
@@ -108,10 +110,10 @@ db.query(`CREATE TABLE IF NOT EXISTS reviews (
   user_id INT NOT NULL,
   restaurant_id INT NOT NULL,
   review TEXT,
-  CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES "users" (id),
-  CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
+  CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
 );`,(err,result)=>{
-  if(err)console.error('Query Error',err);
+  if(err)console.error('Create reviews Table query Error: ',err);
 });
 
 
@@ -134,16 +136,30 @@ app.post("/api/login", (req, res) => {
       if (err) console.log("Connection Error: ", err);
       else {
           db.query(
-              `SELECT id, first_name, last_name, address, mobile, email type FROM users WHERE mobile=${mobile};`,
+              `SELECT id, first_name, last_name, address, mobile, email, user_type FROM users WHERE mobile=${mobile};`,
               (err, result, fields) => {
                   if (err) console.log('Query Error:', err);
-                  else res.send(result.rows);
+                  else {
+                    if(result.rows[0].user_type=='owner'){
+                      db.query(`SELECT * FROM restaurants WHERE owner=${result.rows[0].id};`,(err,result_rest)=>{
+                        if (err) {
+                          console.log(err);
+                          return res.status(500).json({ error: "Database query error" });
+                        }else{res.json({
+                          data:{'user':result.rows[0],'restaurant':result_rest.rows},
+                        });}
+                      });
+                    }else{
+                      res.send(result.rows);
+                    }
+                  }
               }
           );
       }
   });
 });
 
+//register user with the values (first_name, last_name, address, mobile, email, user_type, password)
 app.post("/api/register", cors(corsOptions), (req,res)=>{
   const data = req.body;
 
@@ -151,7 +167,7 @@ app.post("/api/register", cors(corsOptions), (req,res)=>{
     if(err) console.log('Connection Error: ',err);
     else {
       db.query(
-        `INSERT INTO users (first_name, last_name, address, mobile, email, type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.type}','${data.password}');`,(err, result)=>{
+        `INSERT INTO users (first_name, last_name, address, mobile, email, user_type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.user_type}','${data.password}');`,(err, result)=>{
           if(err) console.log('Query Error: ',err);
           else res.send(result.rows); 
         }
@@ -189,7 +205,7 @@ app.post("/api/register-restaurant", (req,res)=>{
         else{
           if(result.rows[0].user_type=='owner'){
             //Create SQL query with parameterized values
-            const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location) 
+            const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location, owner) 
                                 VALUES ('${data.name}',
                                 '${data.address}',
                                 '${data.city}',
@@ -200,7 +216,8 @@ app.post("/api/register-restaurant", (req,res)=>{
                                 '${data.ethnicity ? data.ethnicity : null}',
                                 ${data.table_capacity},
                                 '${data.service_type}',
-                                '${data.location ? data.location : null}');`;
+                                '${data.location ? data.location : null}',
+                                ${data.user_id});`;
             db.connect((err) => {
               if (err) {
                 console.log("Connection Error: ", err);
@@ -215,7 +232,7 @@ app.post("/api/register-restaurant", (req,res)=>{
                       .status(500)
                       .json({ error: "Database Query error" });
                   } else {
-                    res.json({ message: "Restaurant registered" });
+                    res.status(200).json({ message: "Restaurant registered" });
                   }
                 });
               }
@@ -244,9 +261,9 @@ app.post('/api/update-restaurant', (req,res)=>{
                                            ${data.ethnicity ? `ethnicity='${data.ethnicity}',`:''}
                                            ${data.table_capacity ? `table_capacity=${data.table_capacity},`:''}
                                            ${data.service_type ? `service_type='${data.service_type}',`:''}
-                                           ${data.location ? `location='${data.location}'`:''}
+                                           ${data.location ? `location='${data.location}',`:''}
+                                           owner=${data.user_id}
                                       WHERE id=${data.id};`;
-  console.log(sqlQuery);
   db.connect((err)=>{
     if (err) {console.log("Connection error", err);return res.status(500).json({ error: "Database connection error" });}
   
