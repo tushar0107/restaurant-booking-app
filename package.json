@@ -4,7 +4,6 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-   
     "start": "node -r dotenv/config server.js",
     "build": "react-scripts build"
   },
@@ -13,6 +12,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.3",
     "mysql": "^2.18.1",
     "node-modules": "^1.0.1",
     "pg": "^8.11.3"
