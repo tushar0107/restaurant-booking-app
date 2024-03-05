@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const multer = require('multer');
 const {Pool} = require('pg');
 var cors = require('cors');
 const dotenv = require('dotenv');
@@ -8,10 +9,24 @@ dotenv.config();
 const app = express();
 const bodyParser = require('body-parser');
 
+//file storage
+const storage = multer.diskStorage({
+  destination: function(req,file,cb){
+    cb(null,'uploads/');
+  },
+  filename:function(req,file,cb){
+    var food = req.body;
+    //rename the file to avoid conflict
+    cb(null,food.id+'-'+food.food_item.replaceAll(' ','-')+'.'+file.originalname.split('.')[1]);
+  }
+});
+
+const upload = multer({storage: storage});
+
 var whiteList = ['http://127.0.0.1:3000'];
 
 var corsOptions = {
-  origin: 'http://127.0.0.1:8000',
+  origin: 'http://127.0.0.1:3000',
   optionsSuccessStatus: 200
 }
 
@@ -69,6 +84,7 @@ db.query(`CREATE TABLE IF NOT EXISTS menu (
   food_item VARCHAR(200) NOT NULL,
   food_desc VARCHAR(500),
   price INT,
+  food_image_url VARCHAR(150),
   restaurant_id INT NOT NULL,
   CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurant(id)
 );`,(err,result)=>{
@@ -118,17 +134,15 @@ db.query(`CREATE TABLE IF NOT EXISTS reviews (
 
 
 app.use('/static', express.static('public'));
+app.use('/uploads', express.static('uploads'));
 
 app.use(bodyParser.urlencoded({extended:false}));
 app.use(bodyParser.json());
 
 // root site
-app.get('/', function(req,res){
+app.get('/home', function(req,res){
     res.sendFile(__dirname + '/public/home.html');
 });
-
-app.get('/')
-
 
 app.post("/api/login", (req, res) => {
   const mobile = parseInt(req.body.mobile);
@@ -206,18 +220,8 @@ app.post("/api/register-restaurant", (req,res)=>{
           if(result.rows[0].user_type=='owner'){
             //Create SQL query with parameterized values
             const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location, owner) 
-                                VALUES ('${data.name}',
-                                '${data.address}',
-                                '${data.city}',
-                                '${data.state}',
-                                ${data.phone1},
-                                ${data.phone2 ? data.phone2 : null},
-                                '${data.type}',
-                                '${data.ethnicity ? data.ethnicity : null}',
-                                ${data.table_capacity},
-                                '${data.service_type}',
-                                '${data.location ? data.location : null}',
-                                ${data.user_id});`;
+                                VALUES ('${data.name}','${data.address}','${data.city}','${data.state}',${data.phone1},${data.phone2 ? data.phone2 : null},'${data.type}',
+                                '${data.ethnicity ? data.ethnicity : null}',${data.table_capacity},'${data.service_type}','${data.location ? data.location : null}',${data.user_id});`;
             db.connect((err) => {
               if (err) {
                 console.log("Connection Error: ", err);
@@ -265,7 +269,7 @@ app.post('/api/update-restaurant', (req,res)=>{
                                            owner=${data.user_id}
                                       WHERE id=${data.id};`;
   db.connect((err)=>{
-    if (err) {console.log("Connection error", err);return res.status(500).json({ error: "Database connection error" });}
+    if (err) {console.log("Connection error", err);return res.status(500).json({ 'error': err });}
   
     db.query(sqlQuery,(err,result)=>{
       if (err) {
@@ -310,11 +314,30 @@ app.get("/api/restaurants", (req, res) => {
     });
   });
 
+//create menu item for a particular restaurant
+app.post('/api/create-menu', upload.single('image'),(req,res)=>{
+  const formdata = req.body;
+  const image = req.file;
 
+  db.connect((err)=>{
+    if(err)console.log('Menu create: Connection Error: ',err);
+    else{
+      db.query(`INSERT INTO menu (type,food_item,food_desc,price,food_image_url,restaurant_id) VALUES(
+        '${formdata.type}','${formdata.food_item}','${formdata.food_desc}',${formdata.price},'${image.path}',${formdata.restaurant_id});`,(err,result)=>{
+          if(err) res.status(500).json({'Error':err,'result':result});
+          else{
+            res.status(200).json({'message':'Menu Item created'});
+          }
+        });
+    }
+  });
+});
+
+// get menu list from the restaurant id
 app.get('/api/menu/:id',(req,res)=>{
   const id = req.params.id;
   db.connect((err)=>{
-    if (err) console.log("Connection Error: ", err);
+    if (err) console.log("Menu get: Connection Error: ", err);
     db.query(
       `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result,fields)=>{
         if(err) res.send(err);
@@ -327,20 +350,39 @@ app.get('/api/menu/:id',(req,res)=>{
   });
 });
 
+//update menu item with provided menu id
+app.post('/api/update-menu', upload.single('image'),(req,res)=>{
+  const formdata = req.body;
+  const foodImage = req.file;
+  const sqlQuery = `UPDATE menu SET ${formdata.food_item? `food_item='${formdata.food_item}'`:''}
+                                    ${formdata.food_desc? `, food_desc='${formdata.food_desc}'`:''}
+                                    ${formdata.type? `, type='${formdata.type}'`:''}
+                                    ${formdata.price? `, price=${formdata.price}`:''}
+                                    ${foodImage? `, food_image_url='${foodImage.path}'`:''} WHERE id=${formdata.id};`
+  
+  db.connect((err)=>{
+    if(err){
+      res.status(500).json({'error_type':'update menu error connection: ','error': err});
+    }else{
+      db.query(sqlQuery,(err,result)=>{
+        if(err){
+          res.status(500).json({'error_type':'Update menu query error','error': err});
+        }else{
+          res.status(200).json({'response':'Menu Item Updated'});
+        }
+      });
+    }
+  });
+});
+
 app.post('/api/booking',(req,res)=>{
   const data = req.body;
   db.connect((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.query(
       `INSERT INTO bookings (user_id, restaurant_id, table_no, details, guests, booking_date, visit_date, visit_time) 
-      VALUES (${data.user_id}, 
-        ${data.restaurant_id}, 
-        ${data.table_no}, 
-        '${data.details}', 
-        ${data.guests}, 
-        '${data.booking_date}',
-        '${data.visit_date}', 
-        '${data.visit_time}');`,(err,result,fields)=>{
+      VALUES (${data.user_id}, ${data.restaurant_id}, ${data.table_no}, '${data.details}', ${data.guests}, '${data.booking_date}',
+      '${data.visit_date}', '${data.visit_time}');`,(err,result,fields)=>{
         if(err) res.send(err);
         res.json({
           length:result.rowCount,

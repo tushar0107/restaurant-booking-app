@@ -19,5 +19,19 @@
         </nav>
     </aside>
 
+    <form action="http://127.0.0.1:8626/api/update-menu" method="post" enctype="multipart/form-data">
+        <input type="number" name="id" placeholder="menu id">
+        <input type="text" name="food_item" placeholder="name">
+        <select name="type" id="">
+            <option value="veg">veg</option>
+            <option value="non-veg">non-veg</option>
+        </select>
+        <input type="text" name="food_desc" placeholder="desc">
+        <input type="number" name="price">
+        <input type="file" name="image">
+        <input type="number" name="restaurant_id">
+        <button type="submit">Submit</button>
+    </form>
+
 </body>
 </html>
