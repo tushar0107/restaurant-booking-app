@@ -23,6 +23,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({storage: storage});
 
+
+
 var whiteList = ['http://127.0.0.1:3000'];
 
 var corsOptions = {
@@ -140,7 +142,7 @@ app.use(bodyParser.urlencoded({extended:false}));
 app.use(bodyParser.json());
 
 // root site
-app.get('/home', function(req,res){
+app.get('/', function(req,res){
     res.sendFile(__dirname + '/public/home.html');
 });
 
@@ -340,11 +342,11 @@ app.get('/api/menu/:id',(req,res)=>{
     if (err) console.log("Menu get: Connection Error: ", err);
     db.query(
       `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result,fields)=>{
-        if(err) res.send(err);
-        res.json({
+        if(err) {res.send(err);}
+        else{res.json({
           length:result.rowCount,
           data:result.rows
-        });
+        });}
       }
     );
   });
@@ -375,19 +377,33 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
   });
 });
 
+app.get('/api/get-bookings',(req,res)=>{
+  const data = req.body;
+  db.connect((err)=>{
+    if (err) console.log("Connection Error: ", err);
+    db.query(sqlQuery,(err,result)=>{
+      if(err) res.send(err);
+        else{res.json({
+          length:result.rowCount,
+          data:result.rows
+        });}
+    });
+  });
+});
+
 app.post('/api/booking',(req,res)=>{
   const data = req.body;
   db.connect((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.query(
-      `INSERT INTO bookings (user_id, restaurant_id, table_no, details, guests, booking_date, visit_date, visit_time) 
-      VALUES (${data.user_id}, ${data.restaurant_id}, ${data.table_no}, '${data.details}', ${data.guests}, '${data.booking_date}',
+      `INSERT INTO bookings (user_id, restaurant_id, table_no, details, guests, visit_date, visit_time) 
+      VALUES (${data.user_id}, ${data.restaurant_id}, ${data.table_no}, '${data.details}', ${data.guests},
       '${data.visit_date}', '${data.visit_time}');`,(err,result,fields)=>{
         if(err) res.send(err);
-        res.json({
+        else{res.json({
           length:result.rowCount,
           data:result.rows
-        });
+        });}
       }
     );
   });
@@ -399,10 +415,15 @@ app.post('/api/add-review', (req,res)=>{
     if(err) console.log('Connection Error: ',err);
     else{
       db.query(
-        `INSERT INTO reviews (user_id, restaurant_id, review, )`
-      )
+        `INSERT INTO reviews (user_id, restaurant_id, review, rating) VALUES (${data.user_id},${data.restaurant_id},'${data.review}',${data.rating});`
+      ,(err,result)=>{
+        if(err){res.status(500).json({'error':err,'error_details':'Review add error'})}
+        else{
+          res.status(200).json({'Result':'Review Added'});
+        }
+      });
     }
-  })
+  });
 });
 
 

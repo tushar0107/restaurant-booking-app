@@ -4,9 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home</title>
+    <style>
+        #time-container{
+            width: 100%;
+            height: fit-content;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%,-50%);
+            font-size: 98px;
+            font-family:Verdana, Geneva, Tahoma, sans-serif;
+        }
+        #time{
+            margin: 0 auto;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
-    <header>
+    <!-- <header>
         <div id="logo">LOGO</div>
     </header>
     <aside>
@@ -17,9 +33,11 @@
             <a href="#"></a>
             <a href="#"></a>
         </nav>
-    </aside>
-
-    <form action="http://127.0.0.1:8626/api/update-menu" method="post" enctype="multipart/form-data">
+    </aside> -->
+    <div id="time-container">
+        <p id="time"></p>
+    </div>
+    <!-- <form action="http://127.0.0.1:8626/api/update-menu" method="post" enctype="multipart/form-data">
         <input type="number" name="id" placeholder="menu id">
         <input type="text" name="food_item" placeholder="name">
         <select name="type" id="">
@@ -31,7 +49,15 @@
         <input type="file" name="image">
         <input type="number" name="restaurant_id">
         <button type="submit">Submit</button>
-    </form>
+    </form> -->
 
 </body>
+<script>
+    document.addEventListener('DOMContentLoaded',()=>{
+        setInterval(()=>{
+            var date = new Date();
+            document.getElementById('time').innerHTML = date.getHours()+' : '+date.getMinutes()+' : '+date.getSeconds();
+        },1000);
+    })
+</script>
 </html>
