@@ -145,6 +145,10 @@ app.use(bodyParser.json());
 app.get('/', function(req,res){
     res.sendFile(__dirname + '/public/home.html');
 });
+// clock site
+app.get('/clock', function(req,res){
+  res.sendFile(__dirname + '/public/clock.html');
+});
 
 app.post("/api/login", (req, res) => {
   const mobile = parseInt(req.body.mobile);
