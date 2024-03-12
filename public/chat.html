@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+</head>
+<body>
+    <p id="msgs"></p>
+    <input type="text" value="" id="message">
+    <button id="send" onclick=sendmsg()>send</button>
+
+
+    <script>
+        // document.addEventListener('DOMContentLoaded',()=>{
+            // const mobile = prompt('Enter Mobile Number');
+            // localStorage.setItem('mobile',JSON.stringify(mobile));
+
+            //close any previously running websocket
+            if(ws){
+                ws.onerror = ws.onopen = ws.onclose = null;
+                ws.close();
+            }
+            // initialize new websocket
+            var ws = new WebSocket(`ws://127.0.0.1:8080/123`);
+
+            ws.onmessage = (data)=>{
+                console.log(JSON.parse(data.data));
+            }
+
+        // });
+        function sendmsg(){
+            const msg = document.getElementById('message').value;
+            ws.send(JSON.stringify(msg));
+        }
+    </script>
+</body>
+</html>

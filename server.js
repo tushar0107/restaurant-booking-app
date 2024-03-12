@@ -1,13 +1,30 @@
 const express = require('express');
 const http = require('http');
+const WebSocket = require("ws");
 const multer = require('multer');
 const {Pool} = require('pg');
 var cors = require('cors');
 const dotenv = require('dotenv');
 dotenv.config();
 
+var port = process.env.PORT;
+
 const app = express();
 const bodyParser = require('body-parser');
+
+
+app.use('/static', express.static('public'));
+app.use('/uploads', express.static('uploads'));
+
+app.use(express.json());
+app.use(bodyParser.urlencoded({extended:false}));
+app.use(bodyParser.json());
+
+// create server for websocket
+const server = http.createServer(app);
+
+// initializing websocket server
+const wss = new WebSocket.Server({port:8080});
 
 //file storage
 const storage = multer.diskStorage({
@@ -32,7 +49,6 @@ var corsOptions = {
   optionsSuccessStatus: 200
 }
 
-var port = process.env.PORT;
 
 // connection to database on render.com
 const db = new Pool({
@@ -135,12 +151,6 @@ db.query(`CREATE TABLE IF NOT EXISTS reviews (
 });
 
 
-app.use('/static', express.static('public'));
-app.use('/uploads', express.static('uploads'));
-
-app.use(bodyParser.urlencoded({extended:false}));
-app.use(bodyParser.json());
-
 // root site
 app.get('/', function(req,res){
     res.sendFile(__dirname + '/public/home.html');
@@ -148,6 +158,10 @@ app.get('/', function(req,res){
 // clock site
 app.get('/clock', function(req,res){
   res.sendFile(__dirname + '/public/clock.html');
+});
+// chat site
+app.get('/chat', function(req,res){
+  res.sendFile(__dirname + '/public/chat.html');
 });
 
 app.post("/api/login", (req, res) => {
@@ -430,6 +444,48 @@ app.post('/api/add-review', (req,res)=>{
   });
 });
 
+
+
+//      websocket utilities    //
+const users = {};
+
+
+wss.on("connection", (ws, req) => {
+  const userId = req.url.split("/").pop();
+  //store websocket connection associated with the user id
+  users[userId] = ws;
+
+  ws.on("message", (msg) => {
+    const data = JSON.parse(msg);
+    const user = users[data.receiver];
+    const sender = data.sender;
+
+    if (user !== undefined) {
+      if (user !== ws && user.readyState === WebSocket.OPEN) {
+        console.log(msg.toString());
+        user.send(JSON.stringify(msg.toString()));
+        // i can add feature to save the messages to database here
+      } else if (user !== ws && user.readyState !== WebSocket.OPEN) {
+        sender.send({ status: "offline", user: userId }.toString());
+      }
+    } else {
+      if (sender === ws && sender.readyState === WebSocket.OPEN) {
+        sender.send(JSON.stringify(msg.toString()));
+      }
+    }
+  });
+
+  //handling errors
+  ws.on("error", (error) => {
+    res.send(error);
+    console.log(error);
+  });
+
+  //after the connection is closed
+  ws.on("close", (event) => {
+    delete users[userId];
+  });
+});
 
 app.listen(port,function(){
     console.log(`Listening on port ${port}`);
