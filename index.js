@@ -1,9 +1,19 @@
 const {Pool} = require('pg');
 const express = require('express');
 const http = require('http');
+const bcrypt = require('bcrypt');
 
 const app = express();
 
+// function convertToHash(plainPassword){
+//     bcrypt.hash(plainPassword,8,function(err,hash){
+      
+//         return hash.toString();
+      
+//     });
+//   }
+  const hash = bcrypt.hashSync('Jane@123', 5);
+  console.log(hash);
 
 
 const connection = new Pool({
