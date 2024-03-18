@@ -4,10 +4,21 @@ const multer = require('multer');
 const {Pool} = require('pg');
 var cors = require('cors');
 const dotenv = require('dotenv');
+const bcrypt = require('bcrypt');
 dotenv.config();
+
+var port = process.env.PORT;
 
 const app = express();
 const bodyParser = require('body-parser');
+
+
+app.use('/static', express.static('public'));
+app.use('/uploads', express.static('uploads'));
+
+app.use(express.json());
+app.use(bodyParser.urlencoded({extended:false}));
+app.use(bodyParser.json());
 
 //file storage
 const storage = multer.diskStorage({
@@ -32,7 +43,6 @@ var corsOptions = {
   optionsSuccessStatus: 200
 }
 
-var port = process.env.PORT;
 
 // connection to database on render.com
 const db = new Pool({
@@ -135,12 +145,6 @@ db.query(`CREATE TABLE IF NOT EXISTS reviews (
 });
 
 
-app.use('/static', express.static('public'));
-app.use('/uploads', express.static('uploads'));
-
-app.use(bodyParser.urlencoded({extended:false}));
-app.use(bodyParser.json());
-
 // root site
 app.get('/', function(req,res){
     res.sendFile(__dirname + '/public/home.html');
@@ -150,27 +154,40 @@ app.get('/clock', function(req,res){
   res.sendFile(__dirname + '/public/clock.html');
 });
 
+//user login api with form data (mobile and password)
 app.post("/api/login", (req, res) => {
   const mobile = parseInt(req.body.mobile);
+  const plainPassword = req.body.password;
+
   db.connect((err) => {
       if (err) console.log("Connection Error: ", err);
       else {
           db.query(
-              `SELECT id, first_name, last_name, address, mobile, email, user_type FROM users WHERE mobile=${mobile};`,
-              (err, result, fields) => {
-                  if (err) console.log('Query Error:', err);
+              `SELECT * FROM users WHERE mobile=${mobile};`,
+              (err, result) => {
+                  if (err) console.log('Query Error: User Login ', err);
                   else {
-                    if(result.rows[0].user_type=='owner'){
-                      db.query(`SELECT * FROM restaurants WHERE owner=${result.rows[0].id};`,(err,result_rest)=>{
-                        if (err) {
-                          console.log(err);
-                          return res.status(500).json({ error: "Database query error" });
-                        }else{res.json({
-                          data:{'user':result.rows[0],'restaurant':result_rest.rows},
-                        });}
-                      });
+                    if(result.rows.length==0){
+                      res.send({'message':'Mobile number does not exists'});
                     }else{
-                      res.send(result.rows);
+                      var dbPassword = result.rows[0].password;
+                      const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
+                      if(isValidPassword==true){
+                        if(result.rows[0].user_type=='owner'){
+                          db.query(`SELECT * FROM restaurants WHERE owner=${result.rows[0].id};`,(err,result_rest)=>{
+                            if (err) {
+                              console.log(err);
+                              return res.status(500).json({ error: "Database query error" });
+                            }else{res.json({
+                              data:{'user':result.rows[0],'restaurant':result_rest.rows},
+                            });}
+                          });
+                        }else{
+                          res.send(result.rows);
+                        }
+                      }else{
+                        res.send({'message':'Incorrect Password'});
+                      }
                     }
                   }
               }
@@ -179,33 +196,78 @@ app.post("/api/login", (req, res) => {
   });
 });
 
-//register user with the values (first_name, last_name, address, mobile, email, user_type, password)
-app.post("/api/register", cors(corsOptions), (req,res)=>{
+//register user with the values (first_name, last_name, address, mobile, email, user_type('customer'), password)
+app.post("/api/register-user", cors(corsOptions), (req,res)=>{
   const data = req.body;
+  //converts user's plain password to hashed password
+  const hashedPassword = bcrypt.hashSync(data.password,8);
 
   db.connect((err)=>{
     if(err) console.log('Connection Error: ',err);
     else {
-      db.query(
-        `INSERT INTO users (first_name, last_name, address, mobile, email, user_type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.user_type}','${data.password}');`,(err, result)=>{
-          if(err) console.log('Query Error: ',err);
-          else res.send(result.rows); 
+      //check if there already exists the mobile number in users table
+      db.query(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
+        if(err){
+          console.log('Query Error: - Check Mobiles in db while registering user: ',err);
+        }else{
+          if(result.rows.length>0){
+            res.send({'message':'Mobile number already exists'});
+          }else{
+            db.query(
+              `INSERT INTO users (first_name, last_name, address, mobile, email, user_type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.user_type}','${hashedPassword}');`,(err, result)=>{
+                if(err) console.log('Query Error: registering user ',err);
+                else res.status(200).json({'message':'User registered'});
+              }
+            );
+          }
         }
-      );
+      });
+      
+      
     }
   });
 });
 
-app.get("/api/user/:id", cors(corsOptions), (req,res)=>{
-  const id = parseInt(req.params.id);
-  db.connect((err)=> {
+// update user info required mobile and password
+app.post('/api/update-user',function(req,res){
+  const data = req.body;
+  //converts user's plain password to hashed password
+  const hashedPassword = bcrypt.hashSync(data.password,8);
+
+  const sqlQuery = `UPDATE users SET ${data.first_name ? `first_name='${data.name}',`:''}
+                                     ${data.last_name ? `last_name='${data.last_name}',`:''}
+                                     ${data.address ? `address='${data.address}',`:''}
+                                     ${data.mobile ? `mobile=${data.mobile},`:''}
+                                     ${data.email ? `email='${data.email}',`:''}
+                                     ${data.user_type ? `user_type='${data.user_type}',`:''}
+                                     ${data.password ? `password='${hashedPassword}'`:''}
+                    WHERE id=${data.id};`;
+  db.connect((err)=>{
     if(err) console.log('Connection Error: ',err);
-    db.query(
-      `SELECT * FROM users WHERE id=${id};`,(err,result)=>{
-        if(err) console.log(err);
-        res.send(result.rows);
-      }
-    )
+    else{
+      db.query(`SELECT password FROM users WHERE mobile=${data.mobile};`,function(err,result){
+        if(err) console.log('Query error - validating user: ',err);
+        else{
+          if(result.rows.length>0){
+            var isValidPassword = bcrypt.compareSync(data.password,result.rows[0].password);
+            if(isValidPassword==true){
+              db.query(sqlQuery,function(err,result){
+                if(err) console.log('Query error - updating user: ',err);
+                else{
+                  res.status(200).json({'messsage':'User updated'});
+                }
+              });
+            }else{
+              res.send({'message':'Incorrect Password'});
+            }
+          }else{
+            res.send({'message':'Mobile number is Incorrect'});
+          }
+        }
+      });
+      
+      
+    }
   });
 });
 
@@ -258,7 +320,7 @@ app.post("/api/register-restaurant", (req,res)=>{
   
 });
 
-
+// update restaurant information
 app.post('/api/update-restaurant', (req,res)=>{
   const data = req.body;
   const sqlQuery = `UPDATE restaurants SET ${data.name ? `name='${data.name}',` : ''}
@@ -295,6 +357,7 @@ app.post('/api/update-restaurant', (req,res)=>{
 });
 
 
+// get restaurants list based on filter
 app.get("/api/restaurants", (req, res) => {
   const filter = req.body;
   // Prepare SQL query with parameterized values
