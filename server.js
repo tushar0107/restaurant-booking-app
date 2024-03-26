@@ -12,6 +12,7 @@ var port = process.env.PORT;
 const app = express();
 const bodyParser = require('body-parser');
 
+app.use(cors());
 
 app.use('/static', express.static('public'));
 app.use('/uploads', express.static('uploads'));
@@ -39,7 +40,7 @@ const upload = multer({storage: storage});
 var whiteList = ['http://127.0.0.1:3000'];
 
 var corsOptions = {
-  origin: 'http://127.0.0.1:3000',
+  origin: 'http://localhost:3000',
   optionsSuccessStatus: 200
 }
 
@@ -155,7 +156,7 @@ app.get('/clock', function(req,res){
 });
 
 //user login api with form data (mobile and password)
-app.post("/api/login", (req, res) => {
+app.post("/api/login", cors(corsOptions), (req, res) => {
   const mobile = parseInt(req.body.mobile);
   const plainPassword = req.body.password;
 
@@ -179,14 +180,14 @@ app.post("/api/login", (req, res) => {
                               console.log(err);
                               return res.status(500).json({ error: "Database query error" });
                             }else{res.json({
-                              data:{'user':result.rows[0],'restaurant':result_rest.rows},
+                              data:{'status':true,'user':result.rows[0],'restaurant':result_rest.rows},
                             });}
                           });
                         }else{
-                          res.send(result.rows);
+                          res.status(200).json({'status':true,'user':result.rows});
                         }
                       }else{
-                        res.send({'message':'Incorrect Password'});
+                        res.send({'status':false,'message':'Incorrect Password'});
                       }
                     }
                   }
@@ -357,8 +358,8 @@ app.post('/api/update-restaurant', (req,res)=>{
 });
 
 
-// get restaurants list based on filter
-app.get("/api/restaurants", (req, res) => {
+// post restaurants list based on filter
+app.post("/api/restaurants", (req, res) => {
   const filter = req.body;
   // Prepare SQL query with parameterized values
   const sqlQuery = `SELECT * FROM restaurants WHERE 1=1 
