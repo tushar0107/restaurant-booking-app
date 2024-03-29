@@ -11,6 +11,7 @@ var port = process.env.PORT;
 
 const app = express();
 const bodyParser = require('body-parser');
+const { type } = require('os');
 
 app.use(cors());
 
@@ -37,13 +38,13 @@ const upload = multer({storage: storage});
 
 
 
-var whiteList = ['http://127.0.0.1:3000'];
+// var whiteList = ['http://127.0.0.1:3000'];
 
-var corsOptions = {
-  origin: 'http://localhost:3000',
-  optionsSuccessStatus: 200
-}
-
+// var corsOptions = {
+//   origin: 'http://localhost:3000',
+//   optionsSuccessStatus: 200
+// }
+app.options('*', cors())
 
 // connection to database on render.com
 const db = new Pool({
@@ -156,7 +157,7 @@ app.get('/clock', function(req,res){
 });
 
 //user login api with form data (mobile and password)
-app.post("/api/login", cors(corsOptions), (req, res) => {
+app.post("/api/login", (req, res) => {
   const mobile = parseInt(req.body.mobile);
   const plainPassword = req.body.password;
 
@@ -198,7 +199,7 @@ app.post("/api/login", cors(corsOptions), (req, res) => {
 });
 
 //register user with the values (first_name, last_name, address, mobile, email, user_type('customer'), password)
-app.post("/api/register-user", cors(corsOptions), (req,res)=>{
+app.post("/api/register-user", (req,res)=>{
   const data = req.body;
   //converts user's plain password to hashed password
   const hashedPassword = bcrypt.hashSync(data.password,8);
@@ -357,14 +358,32 @@ app.post('/api/update-restaurant', (req,res)=>{
   });
 });
 
+app.get('/api/get-restaurant/:id',(req,res)=>{
+  db.connect((err)=>{
+    if(err){console.log("Connection Error- Connectiong to fetch restaurant: \n ",err)}
+    else{
+      db.query(`SELECT * FROM restaurants WHERE id=${req.params.id}`,(err,result)=>{
+        if(err){
+          console.log('Query Error- Querying to fetch restaurant by id: \n',err);
+        }else{
+          res.status(200).json({
+            status:true,
+            data:result.rows,
+          });
+        }
+      });
+    }
+  });
+});
+
 
 // post restaurants list based on filter
 app.post("/api/restaurants", (req, res) => {
   const filter = req.body;
   // Prepare SQL query with parameterized values
   const sqlQuery = `SELECT * FROM restaurants WHERE 1=1 
-                    ${filter.name ? `AND name LIKE '%${filter.name}%'` : ''}
-                    ${filter.city ? `AND city='${filter.city}'` : ''}
+                    ${filter.name ? `AND name ILIKE '%${filter.name}%'` : ''}
+                    ${filter.city ? `AND city ILIKE '${filter.city}'` : ''}
                     ${filter.type ? `AND type='${filter.type}'` : ''}
                     ${filter.ethnicity ? `AND ethnicity='${filter.ethnicity}'` : ''}
                     ${filter.table_capacity ? `AND table_capacity >= ${filter.table_capacity}` : ''}
@@ -412,6 +431,7 @@ app.get('/api/menu/:id',(req,res)=>{
       `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result,fields)=>{
         if(err) {res.send(err);}
         else{res.json({
+          status:true,
           length:result.rowCount,
           data:result.rows
         });}
