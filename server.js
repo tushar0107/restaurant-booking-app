@@ -125,7 +125,7 @@ db.query(`CREATE TABLE IF NOT EXISTS bookings (
   table_no VARCHAR(50),
   details TEXT,
   guests INT,
-  booking_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  booking_date TIMESTAMP WITHOUT TIME ZONE,
   visit_date DATE,
   visit_time TIME,
   CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id),
@@ -428,7 +428,7 @@ app.get('/api/menu/:id',(req,res)=>{
   db.connect((err)=>{
     if (err) console.log("Menu get: Connection Error: ", err);
     db.query(
-      `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result,fields)=>{
+      `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result)=>{
         if(err) {res.send(err);}
         else{res.json({
           status:true,
@@ -465,16 +465,18 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
   });
 });
 
-app.get('/api/get-bookings',(req,res)=>{
-  const data = req.body;
+app.get('/api/get-bookings/:id',(req,res)=>{
+  const sqlQuery = `SELECT * FROM bookings WHERE user_id=${req.params.id} ORDER BY visit_date DESC;`;
   db.connect((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.query(sqlQuery,(err,result)=>{
       if(err) res.send(err);
-        else{res.json({
+        else{
+          res.json({
           length:result.rowCount,
           data:result.rows
-        });}
+        });
+      }
     });
   });
 });
@@ -484,13 +486,13 @@ app.post('/api/booking',(req,res)=>{
   db.connect((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.query(
-      `INSERT INTO bookings (user_id, restaurant_id, table_no, details, guests, visit_date, visit_time) 
-      VALUES (${data.user_id}, ${data.restaurant_id}, ${data.table_no}, '${data.details}', ${data.guests},
+      `INSERT INTO bookings (user_id, restaurant_id, restaurant_name, table_no, details, guests, booking_date, visit_date, visit_time) 
+      VALUES (${data.user_id}, ${data.restaurant_id}, '${data.restaurant_name}', ${data.table_no}, '${data.details}', ${data.guests},'${data.booking_date}',
       '${data.visit_date}', '${data.visit_time}');`,(err,result,fields)=>{
         if(err) res.send(err);
-        else{res.json({
-          length:result.rowCount,
-          data:result.rows
+        else{res.status(200).json({
+          'message':'A table has been booked for you. We welcome your visit.',
+          'status':result.rows
         });}
       }
     );
