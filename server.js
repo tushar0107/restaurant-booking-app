@@ -180,9 +180,7 @@ app.post("/api/login", (req, res) => {
                             if (err) {
                               console.log(err);
                               return res.status(500).json({ error: "Database query error" });
-                            }else{res.json({
-                              data:{'status':true,'user':result.rows[0],'restaurant':result_rest.rows},
-                            });}
+                            }else{res.json({'status':true,'user':result.rows,'restaurant':result_rest.rows});}
                           });
                         }else{
                           res.status(200).json({'status':true,'user':result.rows});
