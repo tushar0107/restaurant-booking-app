@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
-const multer = require('multer');
+const sqlite = require('sqlite3').verbose();
+
+const multer = require('multer');//for proccessing image files
 const {Pool} = require('pg');
 var cors = require('cors');
 const dotenv = require('dotenv');
@@ -11,7 +13,9 @@ var port = process.env.PORT;
 
 const app = express();
 const bodyParser = require('body-parser');
+const { type } = require('os');
 
+app.use(cors());
 
 app.use('/static', express.static('public'));
 app.use('/uploads', express.static('uploads'));
@@ -36,28 +40,26 @@ const upload = multer({storage: storage});
 
 
 
-var whiteList = ['http://127.0.0.1:3000'];
+// var whiteList = ['http://127.0.0.1:3000'];
 
-var corsOptions = {
-  origin: 'http://127.0.0.1:3000',
-  optionsSuccessStatus: 200
-}
-
+// var corsOptions = {
+//   origin: 'http://localhost:3000',
+//   optionsSuccessStatus: 200
+// }
+app.options('*', cors())
 
 // connection to database on render.com
-const db = new Pool({
-  type:'postgres',
-  user: 'tushar',
-  host: process.env.HOST,
-  database: process.env.DATABASE,
-  password: process.env.PASSWORD,
-  port: 5432,
-  ssl:true
+const db = new sqlite.Database('restrodb.db',(err)=>{
+  if(err){
+    console.log("Error Initializing database");
+  }
+  console.log('Database Connected successfully');
 });
 
+
 //create user table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   first_name VARCHAR(50) NOT NULL,
   last_name VARCHAR(50),
   mobile BIGINT NOT NULL UNIQUE,
@@ -70,8 +72,8 @@ db.query(`CREATE TABLE IF NOT EXISTS users (
 });
 
 //create restaurant table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS restaurants (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS restaurants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   name VARCHAR(50) NOT NULL,
   address VARCHAR(200) NOT NULL,
   city VARCHAR(30) NOT NULL,
@@ -90,8 +92,8 @@ db.query(`CREATE TABLE IF NOT EXISTS restaurants (
 });
 
 //create menu table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS menu (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS menu (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   type VARCHAR(20) CHECK (type IN ('veg', 'non-veg', 'mixed')),
   food_item VARCHAR(200) NOT NULL,
   food_desc VARCHAR(500),
@@ -104,8 +106,8 @@ db.query(`CREATE TABLE IF NOT EXISTS menu (
 });
 
 //create food Item table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS food_item (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS food_item (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   type VARCHAR(20) CHECK (type IN ('veg', 'non-veg')),
   name VARCHAR(100) NOT NULL,
   genre VARCHAR(50),
@@ -116,14 +118,14 @@ db.query(`CREATE TABLE IF NOT EXISTS food_item (
 });
 
 //create bookings table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS bookings (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS bookings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INT NOT NULL,
   restaurant_id INT NOT NULL,
   table_no VARCHAR(50),
   details TEXT,
   guests INT,
-  booking_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  booking_date TIMESTAMP WITHOUT TIME ZONE,
   visit_date DATE,
   visit_time TIME,
   CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id),
@@ -133,8 +135,8 @@ db.query(`CREATE TABLE IF NOT EXISTS bookings (
 });
 
 //create reviews table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS reviews (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INT NOT NULL,
   restaurant_id INT NOT NULL,
   review TEXT,
@@ -178,15 +180,13 @@ app.post("/api/login", (req, res) => {
                             if (err) {
                               console.log(err);
                               return res.status(500).json({ error: "Database query error" });
-                            }else{res.json({
-                              data:{'user':result.rows[0],'restaurant':result_rest.rows},
-                            });}
+                            }else{res.json({'status':true,'user':result.rows,'restaurant':result_rest.rows});}
                           });
                         }else{
-                          res.send(result.rows);
+                          res.status(200).json({'status':true,'user':result.rows});
                         }
                       }else{
-                        res.send({'message':'Incorrect Password'});
+                        res.send({'status':false,'message':'Incorrect Password'});
                       }
                     }
                   }
@@ -197,20 +197,22 @@ app.post("/api/login", (req, res) => {
 });
 
 //register user with the values (first_name, last_name, address, mobile, email, user_type('customer'), password)
-app.post("/api/register-user", cors(corsOptions), (req,res)=>{
+app.post("/api/register-user", (req,res)=>{
   const data = req.body;
+  console.log(data);
   //converts user's plain password to hashed password
   const hashedPassword = bcrypt.hashSync(data.password,8);
 
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err) console.log('Connection Error: ',err);
     else {
       //check if there already exists the mobile number in users table
-      db.query(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
+      db.run(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
         if(err){
           console.log('Query Error: - Check Mobiles in db while registering user: ',err);
         }else{
-          if(result.rows.length>0){
+          console.log(result);
+          if(result.length>0){
             res.send({'message':'Mobile number already exists'});
           }else{
             db.query(
@@ -356,14 +358,32 @@ app.post('/api/update-restaurant', (req,res)=>{
   });
 });
 
+app.get('/api/get-restaurant/:id',(req,res)=>{
+  db.connect((err)=>{
+    if(err){console.log("Connection Error- Connectiong to fetch restaurant: \n ",err)}
+    else{
+      db.query(`SELECT * FROM restaurants WHERE id=${req.params.id}`,(err,result)=>{
+        if(err){
+          console.log('Query Error- Querying to fetch restaurant by id: \n',err);
+        }else{
+          res.status(200).json({
+            status:true,
+            data:result.rows,
+          });
+        }
+      });
+    }
+  });
+});
 
-// get restaurants list based on filter
-app.get("/api/restaurants", (req, res) => {
+
+// post restaurants list based on filter
+app.post("/api/restaurants", (req, res) => {
   const filter = req.body;
   // Prepare SQL query with parameterized values
   const sqlQuery = `SELECT * FROM restaurants WHERE 1=1 
-                    ${filter.name ? `AND name LIKE '%${filter.name}%'` : ''}
-                    ${filter.city ? `AND city='${filter.city}'` : ''}
+                    ${filter.name ? `AND name ILIKE '%${filter.name}%'` : ''}
+                    ${filter.city ? `AND city ILIKE '${filter.city}'` : ''}
                     ${filter.type ? `AND type='${filter.type}'` : ''}
                     ${filter.ethnicity ? `AND ethnicity='${filter.ethnicity}'` : ''}
                     ${filter.table_capacity ? `AND table_capacity >= ${filter.table_capacity}` : ''}
@@ -408,9 +428,10 @@ app.get('/api/menu/:id',(req,res)=>{
   db.connect((err)=>{
     if (err) console.log("Menu get: Connection Error: ", err);
     db.query(
-      `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result,fields)=>{
+      `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result)=>{
         if(err) {res.send(err);}
         else{res.json({
+          status:true,
           length:result.rowCount,
           data:result.rows
         });}
@@ -444,16 +465,18 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
   });
 });
 
-app.get('/api/get-bookings',(req,res)=>{
-  const data = req.body;
+app.get('/api/get-bookings/:id',(req,res)=>{
+  const sqlQuery = `SELECT * FROM bookings WHERE user_id=${req.params.id} ORDER BY visit_date DESC;`;
   db.connect((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.query(sqlQuery,(err,result)=>{
       if(err) res.send(err);
-        else{res.json({
+        else{
+          res.json({
           length:result.rowCount,
           data:result.rows
-        });}
+        });
+      }
     });
   });
 });
@@ -463,13 +486,13 @@ app.post('/api/booking',(req,res)=>{
   db.connect((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.query(
-      `INSERT INTO bookings (user_id, restaurant_id, table_no, details, guests, visit_date, visit_time) 
-      VALUES (${data.user_id}, ${data.restaurant_id}, ${data.table_no}, '${data.details}', ${data.guests},
+      `INSERT INTO bookings (user_id, restaurant_id, restaurant_name, table_no, details, guests, booking_date, visit_date, visit_time) 
+      VALUES (${data.user_id}, ${data.restaurant_id}, '${data.restaurant_name}', ${data.table_no}, '${data.details}', ${data.guests},'${data.booking_date}',
       '${data.visit_date}', '${data.visit_time}');`,(err,result,fields)=>{
         if(err) res.send(err);
-        else{res.json({
-          length:result.rowCount,
-          data:result.rows
+        else{res.status(200).json({
+          'message':'A table has been booked for you. We welcome your visit.',
+          'status':result.rows
         });}
       }
     );
