@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
-const multer = require('multer');
+const sqlite = require('sqlite3').verbose();
+
+const multer = require('multer');//for proccessing image files
 const {Pool} = require('pg');
 var cors = require('cors');
 const dotenv = require('dotenv');
@@ -47,19 +49,17 @@ const upload = multer({storage: storage});
 app.options('*', cors())
 
 // connection to database on render.com
-const db = new Pool({
-  type:'postgres',
-  user: 'tushar',
-  host: process.env.HOST,
-  database: process.env.DATABASE,
-  password: process.env.PASSWORD,
-  port: 5432,
-  ssl:true
+const db = new sqlite.Database('restrodb.db',(err)=>{
+  if(err){
+    console.log("Error Initializing database");
+  }
+  console.log('Database Connected successfully');
 });
 
+
 //create user table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   first_name VARCHAR(50) NOT NULL,
   last_name VARCHAR(50),
   mobile BIGINT NOT NULL UNIQUE,
@@ -72,8 +72,8 @@ db.query(`CREATE TABLE IF NOT EXISTS users (
 });
 
 //create restaurant table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS restaurants (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS restaurants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   name VARCHAR(50) NOT NULL,
   address VARCHAR(200) NOT NULL,
   city VARCHAR(30) NOT NULL,
@@ -92,8 +92,8 @@ db.query(`CREATE TABLE IF NOT EXISTS restaurants (
 });
 
 //create menu table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS menu (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS menu (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   type VARCHAR(20) CHECK (type IN ('veg', 'non-veg', 'mixed')),
   food_item VARCHAR(200) NOT NULL,
   food_desc VARCHAR(500),
@@ -106,8 +106,8 @@ db.query(`CREATE TABLE IF NOT EXISTS menu (
 });
 
 //create food Item table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS food_item (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS food_item (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   type VARCHAR(20) CHECK (type IN ('veg', 'non-veg')),
   name VARCHAR(100) NOT NULL,
   genre VARCHAR(50),
@@ -118,8 +118,8 @@ db.query(`CREATE TABLE IF NOT EXISTS food_item (
 });
 
 //create bookings table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS bookings (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS bookings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INT NOT NULL,
   restaurant_id INT NOT NULL,
   table_no VARCHAR(50),
@@ -135,8 +135,8 @@ db.query(`CREATE TABLE IF NOT EXISTS bookings (
 });
 
 //create reviews table if it does not exists
-db.query(`CREATE TABLE IF NOT EXISTS reviews (
-  id SERIAL PRIMARY KEY,
+db.each(`CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INT NOT NULL,
   restaurant_id INT NOT NULL,
   review TEXT,
@@ -199,18 +199,20 @@ app.post("/api/login", (req, res) => {
 //register user with the values (first_name, last_name, address, mobile, email, user_type('customer'), password)
 app.post("/api/register-user", (req,res)=>{
   const data = req.body;
+  console.log(data);
   //converts user's plain password to hashed password
   const hashedPassword = bcrypt.hashSync(data.password,8);
 
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err) console.log('Connection Error: ',err);
     else {
       //check if there already exists the mobile number in users table
-      db.query(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
+      db.run(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
         if(err){
           console.log('Query Error: - Check Mobiles in db while registering user: ',err);
         }else{
-          if(result.rows.length>0){
+          console.log(result);
+          if(result.length>0){
             res.send({'message':'Mobile number already exists'});
           }else{
             db.query(
