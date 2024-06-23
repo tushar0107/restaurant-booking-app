@@ -161,37 +161,38 @@ app.post("/api/login", (req, res) => {
   const mobile = parseInt(req.body.mobile);
   const plainPassword = req.body.password;
 
-  db.connect((err) => {
+  db.serialize((err) => {
       if (err) console.log("Connection Error: ", err);
       else {
-          db.query(
-              `SELECT * FROM users WHERE mobile=${mobile};`,
-              (err, result) => {
-                  if (err) console.log('Query Error: User Login ', err);
-                  else {
-                    if(result.rows.length==0){
-                      res.send({'message':'Mobile number does not exists'});
-                    }else{
-                      var dbPassword = result.rows[0].password;
-                      const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
-                      if(isValidPassword==true){
-                        if(result.rows[0].user_type=='owner'){
-                          db.query(`SELECT * FROM restaurants WHERE owner=${result.rows[0].id};`,(err,result_rest)=>{
-                            if (err) {
-                              console.log(err);
-                              return res.status(500).json({ error: "Database query error" });
-                            }else{res.json({'status':true,'user':result.rows,'restaurant':result_rest.rows});}
-                          });
-                        }else{
-                          res.status(200).json({'status':true,'user':result.rows});
-                        }
-                      }else{
-                        res.send({'status':false,'message':'Incorrect Password'});
-                      }
-                    }
+          db.get(`SELECT * FROM users WHERE mobile=${mobile};`,(err, result) => {
+            if (err) {
+              console.log('Query Error: User Login ', err)
+            }else if(result) {
+              if(result.length==1){
+                res.send({'message':'Mobile number does not exists','data':result});
+              }else{
+                var dbPassword = result.password;
+                const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
+                if(isValidPassword==true){
+                  if(result.user_type=='owner'){
+                    db.each(`SELECT * FROM restaurants WHERE owner=${result.id};`,(err,result_rest)=>{
+                      if (err) {
+                        console.log(err);
+                        return res.status(500).json({ error: "Database query error" });
+                      }else{res.json({'status':true,'user':result,'restaurant':result_rest});}
+                    });
+                  }else{
+                    res.status(200).json({'status':true,'user':result});
                   }
+                }else{
+                  res.send({'status':false,'message':'Incorrect Password'});
+                }
               }
-          );
+            }else{
+              res.send({'status':false,'message':'Mobile Number not found. Please Check again'});
+            }
+          }
+        );
       }
   });
 });
@@ -199,7 +200,6 @@ app.post("/api/login", (req, res) => {
 //register user with the values (first_name, last_name, address, mobile, email, user_type('customer'), password)
 app.post("/api/register-user", (req,res)=>{
   const data = req.body;
-  console.log(data);
   //converts user's plain password to hashed password
   const hashedPassword = bcrypt.hashSync(data.password,8);
 
@@ -207,25 +207,22 @@ app.post("/api/register-user", (req,res)=>{
     if(err) console.log('Connection Error: ',err);
     else {
       //check if there already exists the mobile number in users table
-      db.run(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
+      db.get(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
         if(err){
           console.log('Query Error: - Check Mobiles in db while registering user: ',err);
         }else{
-          console.log(result);
-          if(result.length>0){
+          if(result){
             res.send({'message':'Mobile number already exists'});
           }else{
-            db.query(
-              `INSERT INTO users (first_name, last_name, address, mobile, email, user_type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.user_type}','${hashedPassword}');`,(err, result)=>{
+            db.run(
+              `INSERT INTO users (first_name, last_name, address, mobile, email, user_type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.user_type ? data.user_type : 'customer'}','${hashedPassword}');`,(err, result)=>{
                 if(err) console.log('Query Error: registering user ',err);
-                else res.status(200).json({'message':'User registered'});
+                else res.status(200).json({'message':'User registered successfully'});
               }
             );
           }
         }
       });
-      
-      
     }
   });
 });
@@ -234,26 +231,29 @@ app.post("/api/register-user", (req,res)=>{
 app.post('/api/update-user',function(req,res){
   const data = req.body;
   //converts user's plain password to hashed password
+  if(!data.mobile){
+    res.status(200).json({'messsage':'Mobile number required'});
+  }else if(!data.password){
+    res.status(200).json({'messsage':'Password required'});
+  }else{
   const hashedPassword = bcrypt.hashSync(data.password,8);
 
-  const sqlQuery = `UPDATE users SET ${data.first_name ? `first_name='${data.name}',`:''}
+  const sqlQuery = `UPDATE users SET ${data.first_name ? `first_name='${data.first_name}',`:''}
                                      ${data.last_name ? `last_name='${data.last_name}',`:''}
                                      ${data.address ? `address='${data.address}',`:''}
-                                     ${data.mobile ? `mobile=${data.mobile},`:''}
                                      ${data.email ? `email='${data.email}',`:''}
                                      ${data.user_type ? `user_type='${data.user_type}',`:''}
                                      ${data.password ? `password='${hashedPassword}'`:''}
                     WHERE id=${data.id};`;
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err) console.log('Connection Error: ',err);
     else{
-      db.query(`SELECT password FROM users WHERE mobile=${data.mobile};`,function(err,result){
+      db.get(`SELECT password FROM users WHERE mobile=${data.mobile};`,function(err,result){
         if(err) console.log('Query error - validating user: ',err);
-        else{
-          if(result.rows.length>0){
-            var isValidPassword = bcrypt.compareSync(data.password,result.rows[0].password);
+          if(result.password){
+            var isValidPassword = bcrypt.compareSync(data.password,result.password);
             if(isValidPassword==true){
-              db.query(sqlQuery,function(err,result){
+              db.run(sqlQuery,(err,result)=>{
                 if(err) console.log('Query error - updating user: ',err);
                 else{
                   res.status(200).json({'messsage':'User updated'});
@@ -263,14 +263,13 @@ app.post('/api/update-user',function(req,res){
               res.send({'message':'Incorrect Password'});
             }
           }else{
-            res.send({'message':'Mobile number is Incorrect'});
+            res.send({'message':'Mobile number not found'});
           }
         }
-      });
-      
-      
+      );
     }
   });
+  }
 });
 
 // this api expects (user_id, restaurant (name*,address*,city*,phone1*,phone2,type*,ethnicity*,table_capacity*,service_type*,location))
@@ -278,41 +277,33 @@ app.post('/api/update-user',function(req,res){
 app.post("/api/register-restaurant", (req,res)=>{
   const data = req.body;
 
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err){
       console.log("Connection Error: ",err);
-      return res.status(500).json({error: "Database Connection error"});
+      res.status(500).json({error: "Database Connection error"});
     }else{
       // check if the requested user is 'owner'
-      db.query(`SELECT user_type FROM users WHERE id=${data.user_id}`,(err,result)=>{
-        if(err){console.log('Query Error: ',err);return res.status(500).json({error:"Database Query error"});}
-        else{
-          if(result.rows[0].user_type=='owner'){
+      db.get(`SELECT user_type FROM users WHERE id=${data.user_id}`,(err,result)=>{
+        if(err){
+          console.log('Query Error: ',err);
+          return res.status(500).json({error:"Database Query error"});
+        }else{
+          if(result.user_type=='owner'){
             //Create SQL query with parameterized values
             const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location, owner) 
                                 VALUES ('${data.name}','${data.address}','${data.city}','${data.state}',${data.phone1},${data.phone2 ? data.phone2 : null},'${data.type}',
                                 '${data.ethnicity ? data.ethnicity : null}',${data.table_capacity},'${data.service_type}','${data.location ? data.location : null}',${data.user_id});`;
-            db.connect((err) => {
+            
+            db.run(sqlQuery, (err, result) => {
               if (err) {
-                console.log("Connection Error: ", err);
-                return res
-                  .status(500)
-                  .json({ error: "Database Connection error" });
+                console.log("Query Error: ", err);
+                return res.status(500).json({ error: "Database Query error" });
               } else {
-                db.query(sqlQuery, (err, result) => {
-                  if (err) {
-                    console.log("Query Error: ", err);
-                    return res
-                      .status(500)
-                      .json({ error: "Database Query error" });
-                  } else {
-                    res.status(200).json({ message: "Restaurant registered" });
-                  }
-                });
+                res.status(200).json({ message: "Restaurant registered" });
               }
             });
           }else{
-            res.json({data:result.rows,message:'You are not eligible to register a restaurant.'});
+            res.json({data:result ,message:'You are not eligible to register a restaurant.'});
           }
         }
       });
@@ -338,37 +329,38 @@ app.post('/api/update-restaurant', (req,res)=>{
                                            ${data.location ? `location='${data.location}',`:''}
                                            owner=${data.user_id}
                                       WHERE id=${data.id};`;
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if (err) {console.log("Connection error", err);return res.status(500).json({ 'error': err });}
   
-    db.query(sqlQuery,(err,result)=>{
+    db.run(sqlQuery,(err,result)=>{
       if (err) {
         console.log(err);
       }
-    });
-    db.query(`SELECT * FROM restaurants WHERE id=${data.id};`,(err,result)=>{
-      if (err) {
-        console.log(err);
-        return res.status(500).json({ error: "Database query error" });
-      }else{res.json({
-        length:result.rowCount,
-        data:result.rows,
-      });}
+        db.get(`SELECT * FROM restaurants;`,(err,result)=>{
+          console.log(result);
+          if (err) {
+            console.log(err);
+            return res.status(500).json({ error: "Database query error" });
+          }else{
+            res.json({data:result});
+          }
+        });
+      
     });
   });
 });
 
 app.get('/api/get-restaurant/:id',(req,res)=>{
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err){console.log("Connection Error- Connectiong to fetch restaurant: \n ",err)}
     else{
-      db.query(`SELECT * FROM restaurants WHERE id=${req.params.id}`,(err,result)=>{
+      db.get(`SELECT * FROM restaurants WHERE id=${req.params.id};`,(err,result)=>{
         if(err){
           console.log('Query Error- Querying to fetch restaurant by id: \n',err);
         }else{
           res.status(200).json({
             status:true,
-            data:result.rows,
+            data:result,
           });
         }
       });
