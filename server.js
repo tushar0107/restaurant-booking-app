@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const ws = require('websocket').server;
 const sqlite = require('sqlite3').verbose();
 
 const multer = require('multer');//for proccessing image files
@@ -175,7 +176,7 @@ app.post("/api/login", (req, res) => {
                 const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
                 if(isValidPassword==true){
                   if(result.user_type=='owner'){
-                    db.each(`SELECT * FROM restaurants WHERE owner=${result.id};`,(err,result_rest)=>{
+                    db.all(`SELECT * FROM restaurants WHERE owner=${result.id};`,(err,result_rest)=>{
                       if (err) {
                         console.log(err);
                         return res.status(500).json({ error: "Database query error" });
@@ -272,6 +273,25 @@ app.post('/api/update-user',function(req,res){
   }
 });
 
+//fetch all users in the database
+app.get('/api/all-users', (req,res)=>{
+  db.serialize((err)=>{
+    if(err){
+      console.log('Error connecting database ', err);
+    }else{
+    db.all('SELECT * FROM users;', (err,result)=>{
+      if(err){
+        console.log('Error fetching data ',err);
+      }
+      res.status(200).json({
+        'status':true,
+        'data':result
+      });
+    });
+    }
+  });
+});
+
 // this api expects (user_id, restaurant (name*,address*,city*,phone1*,phone2,type*,ethnicity*,table_capacity*,service_type*,location))
 // user_type should be 'owner' to register a restaurant
 app.post("/api/register-restaurant", (req,res)=>{
@@ -294,13 +314,18 @@ app.post("/api/register-restaurant", (req,res)=>{
                                 VALUES ('${data.name}','${data.address}','${data.city}','${data.state}',${data.phone1},${data.phone2 ? data.phone2 : null},'${data.type}',
                                 '${data.ethnicity ? data.ethnicity : null}',${data.table_capacity},'${data.service_type}','${data.location ? data.location : null}',${data.user_id});`;
             
-            db.run(sqlQuery, (err, result) => {
-              if (err) {
-                console.log("Query Error: ", err);
-                return res.status(500).json({ error: "Database Query error" });
-              } else {
-                res.status(200).json({ message: "Restaurant registered" });
+            db.serialize((err)=>{
+              if(err){
+                console.log('Error connecting for insert into restaurant: ',err);
               }
+              db.run(sqlQuery, (err, result) => {
+                if (err) {
+                  console.log("Query Error: ", err);
+                  return res.status(500).json({ error: "Database Query error" });
+                } else {
+                  res.status(200).json({ message: "Restaurant registered" });
+                }
+              });
             });
           }else{
             res.json({data:result ,message:'You are not eligible to register a restaurant.'});
@@ -336,20 +361,12 @@ app.post('/api/update-restaurant', (req,res)=>{
       if (err) {
         console.log(err);
       }
-        db.get(`SELECT * FROM restaurants;`,(err,result)=>{
-          console.log(result);
-          if (err) {
-            console.log(err);
-            return res.status(500).json({ error: "Database query error" });
-          }else{
-            res.json({data:result});
-          }
-        });
-      
+      res.status(200).json({'status':true,'message':'Restaurant Updated Sussessfully'});
     });
   });
 });
 
+// get restaurant by id
 app.get('/api/get-restaurant/:id',(req,res)=>{
   db.serialize((err)=>{
     if(err){console.log("Connection Error- Connectiong to fetch restaurant: \n ",err)}
@@ -374,36 +391,53 @@ app.post("/api/restaurants", (req, res) => {
   const filter = req.body;
   // Prepare SQL query with parameterized values
   const sqlQuery = `SELECT * FROM restaurants WHERE 1=1 
-                    ${filter.name ? `AND name ILIKE '%${filter.name}%'` : ''}
-                    ${filter.city ? `AND city ILIKE '${filter.city}'` : ''}
+                    ${filter.name ? `AND name LIKE '%${filter.name}%'` : ''}
+                    ${filter.city ? `AND city LIKE '${filter.city}'` : ''}
                     ${filter.type ? `AND type='${filter.type}'` : ''}
                     ${filter.ethnicity ? `AND ethnicity='${filter.ethnicity}'` : ''}
                     ${filter.table_capacity ? `AND table_capacity >= ${filter.table_capacity}` : ''}
                     ${filter.service_type ? `AND service_type='${filter.service_type}'` : ''}`;
-    db.connect((err) => {
+    db.serialize((err) => {
       if (err) {console.log("Connection error", err);return res.status(500).json({ error: "Database connection error" });}
-      db.query(sqlQuery,(err, result) => {
+      db.all(sqlQuery,(err, result) => {
           if (err) {
             console.log(err);
             return res.status(500).json({ error: "Database query error" });
-          }else{res.json({
-            length:result.rowCount,
-            data:result.rows,
-          });}
+          }else{
+            res.json({
+              length:result.length,
+              data:result,
+            });
+          }
         }
       );
     });
   });
+
+// get all restaurants
+app.get('/api/all-restaurants',(req,res)=>{
+  db.serialize((err)=>{
+    if(err){
+      console.log('Error connecting', err)
+    }
+    db.all('SELECT * FROM restaurants;', (err,result)=>{
+      if(err){
+        console.log('Error fetching restaurants: ',err);
+      }
+      res.status(200).json({'status':true,'data':result});
+    });
+  });
+});
 
 //create menu item for a particular restaurant
 app.post('/api/create-menu', upload.single('image'),(req,res)=>{
   const formdata = req.body;
   const image = req.file;
 
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err)console.log('Menu create: Connection Error: ',err);
     else{
-      db.query(`INSERT INTO menu (type,food_item,food_desc,price,food_image_url,restaurant_id) VALUES(
+      db.run(`INSERT INTO menu (type,food_item,food_desc,price,food_image_url,restaurant_id) VALUES(
         '${formdata.type}','${formdata.food_item}','${formdata.food_desc}',${formdata.price},'${image.path}',${formdata.restaurant_id});`,(err,result)=>{
           if(err) res.status(500).json({'Error':err,'result':result});
           else{
@@ -417,9 +451,9 @@ app.post('/api/create-menu', upload.single('image'),(req,res)=>{
 // get menu list from the restaurant id
 app.get('/api/menu/:id',(req,res)=>{
   const id = req.params.id;
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if (err) console.log("Menu get: Connection Error: ", err);
-    db.query(
+    db.all(
       `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result)=>{
         if(err) {res.send(err);}
         else{res.json({
@@ -442,11 +476,11 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
                                     ${formdata.price? `, price=${formdata.price}`:''}
                                     ${foodImage? `, food_image_url='${foodImage.path}'`:''} WHERE id=${formdata.id};`
   
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err){
       res.status(500).json({'error_type':'update menu error connection: ','error': err});
     }else{
-      db.query(sqlQuery,(err,result)=>{
+      db.run(sqlQuery,(err,result)=>{
         if(err){
           res.status(500).json({'error_type':'Update menu query error','error': err});
         }else{
@@ -459,9 +493,9 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
 
 app.get('/api/get-bookings/:id',(req,res)=>{
   const sqlQuery = `SELECT * FROM bookings WHERE user_id=${req.params.id} ORDER BY visit_date DESC;`;
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if (err) console.log("Connection Error: ", err);
-    db.query(sqlQuery,(err,result)=>{
+    db.all(sqlQuery,(err,result)=>{
       if(err) res.send(err);
         else{
           res.json({
@@ -475,9 +509,9 @@ app.get('/api/get-bookings/:id',(req,res)=>{
 
 app.post('/api/booking',(req,res)=>{
   const data = req.body;
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if (err) console.log("Connection Error: ", err);
-    db.query(
+    db.run(
       `INSERT INTO bookings (user_id, restaurant_id, restaurant_name, table_no, details, guests, booking_date, visit_date, visit_time) 
       VALUES (${data.user_id}, ${data.restaurant_id}, '${data.restaurant_name}', ${data.table_no}, '${data.details}', ${data.guests},'${data.booking_date}',
       '${data.visit_date}', '${data.visit_time}');`,(err,result,fields)=>{
@@ -493,10 +527,10 @@ app.post('/api/booking',(req,res)=>{
 
 app.post('/api/add-review', (req,res)=>{
   const data = req.body;
-  db.connect((err)=>{
+  db.serialize((err)=>{
     if(err) console.log('Connection Error: ',err);
     else{
-      db.query(
+      db.run(
         `INSERT INTO reviews (user_id, restaurant_id, review, rating) VALUES (${data.user_id},${data.restaurant_id},'${data.review}',${data.rating});`
       ,(err,result)=>{
         if(err){res.status(500).json({'error':err,'error_details':'Review add error'})}
@@ -509,6 +543,8 @@ app.post('/api/add-review', (req,res)=>{
 });
 
 
-app.listen(port,function(){
+const server = ()=> app.listen(port,function(){
     console.log(`Listening on port ${port}`);
 });
+
+const wsServer = new ws({httpServer:server});
