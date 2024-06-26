@@ -1,6 +1,6 @@
 const express = require('express');
 const http = require('http');
-const ws = require('websocket').server;
+const WebSocket = require('ws');
 const sqlite = require('sqlite3').verbose();
 
 const multer = require('multer');//for proccessing image files
@@ -15,6 +15,7 @@ var port = process.env.PORT;
 const app = express();
 const bodyParser = require('body-parser');
 const { type } = require('os');
+const { client } = require('websocket');
 
 app.use(cors());
 
@@ -24,6 +25,8 @@ app.use('/uploads', express.static('uploads'));
 app.use(express.json());
 app.use(bodyParser.urlencoded({extended:false}));
 app.use(bodyParser.json());
+
+const server = http.createServer(app);
 
 //file storage
 const storage = multer.diskStorage({
@@ -157,6 +160,10 @@ app.get('/clock', function(req,res){
   res.sendFile(__dirname + '/public/clock.html');
 });
 
+app.get('/chat', function(req,res){
+  res.sendFile(__dirname + '/public/chat.html');
+});
+
 //user login api with form data (mobile and password)
 app.post("/api/login", (req, res) => {
   const mobile = parseInt(req.body.mobile);
@@ -165,7 +172,7 @@ app.post("/api/login", (req, res) => {
   db.serialize((err) => {
       if (err) console.log("Connection Error: ", err);
       else {
-          db.get(`SELECT * FROM users WHERE mobile=${mobile};`,(err, result) => {
+          db.each(`SELECT * FROM users WHERE mobile=${mobile};`,(err, result) => {
             if (err) {
               console.log('Query Error: User Login ', err)
             }else if(result) {
@@ -176,11 +183,12 @@ app.post("/api/login", (req, res) => {
                 const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
                 if(isValidPassword==true){
                   if(result.user_type=='owner'){
+                    console.log(result.id);
                     db.all(`SELECT * FROM restaurants WHERE owner=${result.id};`,(err,result_rest)=>{
                       if (err) {
                         console.log(err);
                         return res.status(500).json({ error: "Database query error" });
-                      }else{res.json({'status':true,'user':result,'restaurant':result_rest});}
+                      }else{console.log(result);res.json({'status':true,'user':result,'restaurant':result_rest});}
                     });
                   }else{
                     res.status(200).json({'status':true,'user':result});
@@ -543,8 +551,46 @@ app.post('/api/add-review', (req,res)=>{
 });
 
 
-const server = ()=> app.listen(port,function(){
-    console.log(`Listening on port ${port}`);
+
+const ws = new WebSocket.Server({server:server});
+
+const users = {};
+
+ws.on('connection', (socket,req)=>{
+  const userId = req.url.split('/').pop();
+  users[userId] = socket;
+  
+
+  socket.on("message", (msg)=>{
+    console.log(msg.toString());
+    const data = JSON.parse(msg);
+    console.log('data',data);
+    const user = users[data.receiver];
+    const sender = data.sender;
+
+    if(user !==undefined){
+      if(user !== socket && user.readyState === WebSocket.OPEN){
+        console.log(msg.toString());
+      }else if(user !== socket && user.readyState !== WebSocket.OPEN){
+        sender.send(JSON.stringify({status:'offline',user:userId}));
+      }
+    }else{
+      if(sender === socket && sender.readyState === WebSocket.OPEN){
+        sender.send(JSON.stringify(msg.toString()));
+      }
+    }
+  });
+
+  socket.on('error', (error)=>{
+    console.log('Websocket error: ',error);
+  });
+
+  socket.on('close', (event)=>{
+    console.log('websocket closed: ',event);
+  });
 });
 
-const wsServer = new ws({httpServer:server});
+
+server.listen(port,function(){
+    console.log(`Listening on port ${port}`);
+});

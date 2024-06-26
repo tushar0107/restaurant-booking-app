@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+	<div>
+		<p id="message"></p>
+	</div>
+    
+
+    <script>
+        document.addEventListener('DOMContentLoaded',function(){
+            var ws = new WebSocket('ws://127.0.0.1:8626/7304431820');
+            
+            if(ws.readyState===WebSocket.OPEN){
+				console.log('connected');
+				}
+				setTimeout(()=>{
+					console.log('sending');
+					ws.send(JSON.stringify({sender:'7304431820',receiver:'7038461320',msg:'hello'}));
+
+				},4000);
+
+			ws.onmessage = (msg)=>{
+				console.log(msg.data);
+				document.getElementById('message').innerHTML = JSON.stringify(msg.data);
+			}
+            ws.onclose = function () {
+    			ws.null;
+			};
+        });
+    </script>
+</body>
+</html>
