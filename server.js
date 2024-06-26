@@ -172,30 +172,27 @@ app.post("/api/login", (req, res) => {
   db.serialize((err) => {
       if (err) console.log("Connection Error: ", err);
       else {
-          db.each(`SELECT * FROM users WHERE mobile=${mobile};`,(err, result) => {
+          db.get(`SELECT * FROM users WHERE mobile=${mobile};`,(err, result) => {
             if (err) {
               console.log('Query Error: User Login ', err)
             }else if(result) {
-              if(result.length==1){
-                res.send({'message':'Mobile number does not exists','data':result});
-              }else{
-                var dbPassword = result.password;
-                const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
-                if(isValidPassword==true){
-                  if(result.user_type=='owner'){
-                    console.log(result.id);
-                    db.all(`SELECT * FROM restaurants WHERE owner=${result.id};`,(err,result_rest)=>{
-                      if (err) {
-                        console.log(err);
-                        return res.status(500).json({ error: "Database query error" });
-                      }else{console.log(result);res.json({'status':true,'user':result,'restaurant':result_rest});}
-                    });
-                  }else{
-                    res.status(200).json({'status':true,'user':result});
-                  }
+              var dbPassword = result.password;
+              const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
+              if(isValidPassword==true){
+                if(result.user_type=='owner'){
+                  db.all(`SELECT * FROM restaurants WHERE owner=${result.id};`,(err,result_rest)=>{
+                    if (err) {
+                      console.log(err);
+                      return res.status(500).json({ error: "Database query error" });
+                    }else{
+                      res.json({'status':true,'user':result,'restaurant':result_rest});
+                    }
+                  });
                 }else{
-                  res.send({'status':false,'message':'Incorrect Password'});
+                  res.status(200).json({'status':true,'user':result});
                 }
+              }else{
+                res.send({'status':false,'message':'Incorrect Password'});
               }
             }else{
               res.send({'status':false,'message':'Mobile Number not found. Please Check again'});
@@ -466,8 +463,8 @@ app.get('/api/menu/:id',(req,res)=>{
         if(err) {res.send(err);}
         else{res.json({
           status:true,
-          length:result.rowCount,
-          data:result.rows
+          length:result.length,
+          data:result
         });}
       }
     );
@@ -500,15 +497,16 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
 });
 
 app.get('/api/get-bookings/:id',(req,res)=>{
-  const sqlQuery = `SELECT * FROM bookings WHERE user_id=${req.params.id} ORDER BY visit_date DESC;`;
+  const sqlQuery = `SELECT r.name, r.address, r.phone1, r.phone2, b.booking_date, b.id, b.table_no, b.user_id, b.visit_date, b.visit_time, b.details FROM bookings b JOIN restaurants r ON b.restaurant_id=r.id WHERE user_id=${req.params.id} ORDER BY visit_date DESC;`;
   db.serialize((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.all(sqlQuery,(err,result)=>{
       if(err) res.send(err);
         else{
           res.json({
-          length:result.rowCount,
-          data:result.rows
+          'length':result.length,
+          'data':result,
+          'status':true
         });
       }
     });
@@ -518,18 +516,22 @@ app.get('/api/get-bookings/:id',(req,res)=>{
 app.post('/api/booking',(req,res)=>{
   const data = req.body;
   db.serialize((err)=>{
-    if (err) console.log("Connection Error: ", err);
-    db.run(
-      `INSERT INTO bookings (user_id, restaurant_id, restaurant_name, table_no, details, guests, booking_date, visit_date, visit_time) 
-      VALUES (${data.user_id}, ${data.restaurant_id}, '${data.restaurant_name}', ${data.table_no}, '${data.details}', ${data.guests},'${data.booking_date}',
-      '${data.visit_date}', '${data.visit_time}');`,(err,result,fields)=>{
-        if(err) res.send(err);
-        else{res.status(200).json({
-          'message':'A table has been booked for you. We welcome your visit.',
-          'status':result.rows
-        });}
-      }
-    );
+    if (err){
+      console.log("Connection Error: ", err);
+    }else{
+      db.run(`INSERT INTO bookings (user_id, restaurant_id,  table_no, details, guests, booking_date, visit_date, visit_time) 
+        VALUES (${data.user_id}, ${data.restaurant_id}, ${data.table_no}, '${data.details}', ${data.guests},'${data.booking_date}',
+        '${data.visit_date}', '${data.visit_time}');`,(err,result)=>{
+          if(err){ 
+            console.log('Error: ',err);
+          }else{res.status(200).json({
+            'message':'A table has been booked for you. We welcome your visit.',
+            'status':true
+          });}
+        }
+      );
+    }
+
   });
 });
 
