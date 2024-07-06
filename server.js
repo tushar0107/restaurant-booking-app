@@ -2,20 +2,44 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const sqlite = require('sqlite3').verbose();
+const {MongoClient, ServerApiVersion} = require('mongodb');
+
+const uri = "mongodb+srv://test_user:Tushar172001@my-cluster.snudrh9.mongodb.net/?retryWrites=true&w=majority&appName=my-cluster";
+
+const client = new MongoClient(uri);
+
+async function initDB(){
+  try {
+    await client.connect();
+    const db = client.db('restrodb');
+    console.log('Connected to database.')
+    return db;
+  }catch(e){
+    console.log('Error initializing database: ',e)
+  }
+};
+
+initDB().then(async(db)=>{
+  await db.createCollection('users');
+  await db.createCollection('restaurants');
+  await db.createCollection('menu');
+  await db.createCollection('food_item');
+  await db.createCollection('bookings');
+  await db.createCollection('reviews');
+});
 
 const multer = require('multer');//for proccessing image files
-const {Pool} = require('pg');
+// const {Pool} = require('pg');
 var cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
+
 dotenv.config();
 
 var port = process.env.PORT;
 
 const app = express();
 const bodyParser = require('body-parser');
-const { type } = require('os');
-const { client } = require('websocket');
 
 app.use(cors());
 
@@ -42,113 +66,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({storage: storage});
 
-
-
-// var whiteList = ['http://127.0.0.1:3000'];
-
-// var corsOptions = {
-//   origin: 'http://localhost:3000',
-//   optionsSuccessStatus: 200
-// }
 app.options('*', cors())
-
-// connection to database on render.com
-const db = new sqlite.Database('restrodb.db',(err)=>{
-  if(err){
-    console.log("Error Initializing database");
-  }
-  console.log('Database Connected successfully');
-});
-
-
-//create user table if it does not exists
-db.each(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  first_name VARCHAR(50) NOT NULL,
-  last_name VARCHAR(50),
-  mobile BIGINT NOT NULL UNIQUE,
-  address VARCHAR(200),
-  email VARCHAR(30),
-  password VARCHAR(15) NOT NULL,
-  user_type VARCHAR(20) CHECK (user_type IN ('admin', 'sub-admin', 'staff', 'manager', 'customer', 'owner'))
-);`,(err,result)=>{
-  if(err)console.error('Create users Table query Error: ',err);
-});
-
-//create restaurant table if it does not exists
-db.each(`CREATE TABLE IF NOT EXISTS restaurants (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name VARCHAR(50) NOT NULL,
-  address VARCHAR(200) NOT NULL,
-  city VARCHAR(30) NOT NULL,
-  state VARCHAR(20) NOT NULL,
-  phone1 BIGINT NOT NULL,
-  phone2 BIGINT,
-  type VARCHAR(20) CHECK (type IN ('veg', 'non-veg', 'veg & non-veg')) NOT NULL,
-  ethnicity VARCHAR(30),
-  table_capacity INT,
-  service_type VARCHAR(50),
-  location VARCHAR(100),
-  owner INT NOT NULL,
-  CONSTRAINT fk_restaurant FOREIGN KEY (owner) REFERENCES users(id)
-);`,(err,result)=>{
-  if(err)console.error('Create restaurants Table query Error: ',err);
-});
-
-//create menu table if it does not exists
-db.each(`CREATE TABLE IF NOT EXISTS menu (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  type VARCHAR(20) CHECK (type IN ('veg', 'non-veg', 'mixed')),
-  food_item VARCHAR(200) NOT NULL,
-  food_desc VARCHAR(500),
-  price INT,
-  food_image_url VARCHAR(150),
-  restaurant_id INT NOT NULL,
-  CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurant(id)
-);`,(err,result)=>{
-  if(err)console.error('Create menu Table query Error: ',err);
-});
-
-//create food Item table if it does not exists
-db.each(`CREATE TABLE IF NOT EXISTS food_item (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  type VARCHAR(20) CHECK (type IN ('veg', 'non-veg')),
-  name VARCHAR(100) NOT NULL,
-  genre VARCHAR(50),
-  menu_id INT NOT NULL,
-  CONSTRAINT fk_menu_id FOREIGN KEY (menu_id) REFERENCES menu(id)
-);`,(err,result)=>{
-  if(err)console.error('Create food_item Table query Error: ',err);
-});
-
-//create bookings table if it does not exists
-db.each(`CREATE TABLE IF NOT EXISTS bookings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INT NOT NULL,
-  restaurant_id INT NOT NULL,
-  table_no VARCHAR(50),
-  details TEXT,
-  guests INT,
-  booking_date TIMESTAMP WITHOUT TIME ZONE,
-  visit_date DATE,
-  visit_time TIME,
-  CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id),
-  CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
-);`,(err,result)=>{
-  if(err)console.error('Create bookings Table query Error: ',err);
-});
-
-//create reviews table if it does not exists
-db.each(`CREATE TABLE IF NOT EXISTS reviews (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INT NOT NULL,
-  restaurant_id INT NOT NULL,
-  review TEXT,
-  CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id),
-  CONSTRAINT fk_restaurant_id FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
-);`,(err,result)=>{
-  if(err)console.error('Create reviews Table query Error: ',err);
-});
 
 
 // root site
@@ -166,70 +84,43 @@ app.get('/chat', function(req,res){
 
 //user login api with form data (mobile and password)
 app.post("/api/login", (req, res) => {
-  const mobile = parseInt(req.body.mobile);
+  const mobile = req.body.mobile;
   const plainPassword = req.body.password;
 
-  db.serialize((err) => {
-      if (err) console.log("Connection Error: ", err);
-      else {
-          db.get(`SELECT * FROM users WHERE mobile=${mobile};`,(err, result) => {
-            if (err) {
-              console.log('Query Error: User Login ', err)
-            }else if(result) {
-              var dbPassword = result.password;
-              const isValidPassword = bcrypt.compareSync(plainPassword,dbPassword);
-              if(isValidPassword==true){
-                if(result.user_type=='owner'){
-                  db.all(`SELECT * FROM restaurants WHERE owner=${result.id};`,(err,result_rest)=>{
-                    if (err) {
-                      console.log(err);
-                      return res.status(500).json({ error: "Database query error" });
-                    }else{
-                      res.json({'status':true,'user':result,'restaurant':result_rest});
-                    }
-                  });
-                }else{
-                  res.status(200).json({'status':true,'user':result});
-                }
-              }else{
-                res.send({'status':false,'message':'Incorrect Password'});
-              }
-            }else{
-              res.send({'status':false,'message':'Mobile Number not found. Please Check again'});
-            }
-          }
-        );
+  initDB().then(async(db)=>{
+    const result = await db.collection('users').findOne({'mobile':mobile});
+    if(result){
+      if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
+        res.status(200).json({
+          'status':true,
+          'user':result,
+        });
+      }else{ // for incorrect password
+        res.status(401).json({
+          'status':false,
+          'message':'Incorrect Password'
+        });
       }
+    }else{ //for mobile not found
+      res.status(404).json({
+        'status':false,
+        'message':'Mobile Number not found'
+      });
+    }
   });
 });
+
 
 //register user with the values (first_name, last_name, address, mobile, email, user_type('customer'), password)
 app.post("/api/register-user", (req,res)=>{
   const data = req.body;
   //converts user's plain password to hashed password
   const hashedPassword = bcrypt.hashSync(data.password,8);
+  data.password = hashedPassword;
 
-  db.serialize((err)=>{
-    if(err) console.log('Connection Error: ',err);
-    else {
-      //check if there already exists the mobile number in users table
-      db.get(`SELECT mobile FROM users WHERE mobile=${data.mobile};`,function(err,result){
-        if(err){
-          console.log('Query Error: - Check Mobiles in db while registering user: ',err);
-        }else{
-          if(result){
-            res.send({'message':'Mobile number already exists'});
-          }else{
-            db.run(
-              `INSERT INTO users (first_name, last_name, address, mobile, email, user_type, password) VALUES ('${data.first_name}', '${data.last_name}', '${data.address}', ${data.mobile}, '${data.email}', '${data.user_type ? data.user_type : 'customer'}','${hashedPassword}');`,(err, result)=>{
-                if(err) console.log('Query Error: registering user ',err);
-                else res.status(200).json({'message':'User registered successfully'});
-              }
-            );
-          }
-        }
-      });
-    }
+  initDB().then(async(db)=>{
+    const result = await db.collection('users').insertOne(data);
+    res.status(200).json({'status':true,'result':result});
   });
 });
 
@@ -242,57 +133,48 @@ app.post('/api/update-user',function(req,res){
   }else if(!data.password){
     res.status(200).json({'messsage':'Password required'});
   }else{
-  const hashedPassword = bcrypt.hashSync(data.password,8);
-
-  const sqlQuery = `UPDATE users SET ${data.first_name ? `first_name='${data.first_name}',`:''}
-                                     ${data.last_name ? `last_name='${data.last_name}',`:''}
-                                     ${data.address ? `address='${data.address}',`:''}
-                                     ${data.email ? `email='${data.email}',`:''}
-                                     ${data.user_type ? `user_type='${data.user_type}',`:''}
-                                     ${data.password ? `password='${hashedPassword}'`:''}
-                    WHERE id=${data.id};`;
-  db.serialize((err)=>{
-    if(err) console.log('Connection Error: ',err);
-    else{
-      db.get(`SELECT password FROM users WHERE mobile=${data.mobile};`,function(err,result){
-        if(err) console.log('Query error - validating user: ',err);
-          if(result.password){
-            var isValidPassword = bcrypt.compareSync(data.password,result.password);
-            if(isValidPassword==true){
-              db.run(sqlQuery,(err,result)=>{
-                if(err) console.log('Query error - updating user: ',err);
-                else{
-                  res.status(200).json({'messsage':'User updated'});
-                }
+    initDB().then(async(db)=>{
+      const result = await db.collection('users').findOne({'_id':data.id});
+      if(result){
+        if(bcrypt.compareSync(data.password,result.password)){//compare password
+          // const hashedPassword = bcrypt.hashSync(data.password,8);
+          data.password = hashedPassword;
+          const query = {$set : {
+            first_name: data.first_name,
+            last_name: data.last_name,
+            address: data.address,
+            email: data.email,
+            user_type: data.user_type
+          }};
+          initDB().then(async(db)=>{
+            const result = await db.collection('users').updateOne({'_id':data.id},query);
+            if(result){
+              res.status(200).json({
+                'status':true,
+                'message':'Profile Updated'
               });
-            }else{
-              res.send({'message':'Incorrect Password'});
             }
-          }else{
-            res.send({'message':'Mobile number not found'});
-          }
+          });
+        }else{
+          res.status(401).json({
+            'status':true,
+            'message':'Password is incorrect'
+          });
         }
-      );
-    }
-  });
+      }
+   });
   }
 });
 
 //fetch all users in the database
 app.get('/api/all-users', (req,res)=>{
-  db.serialize((err)=>{
-    if(err){
-      console.log('Error connecting database ', err);
-    }else{
-    db.all('SELECT * FROM users;', (err,result)=>{
-      if(err){
-        console.log('Error fetching data ',err);
-      }
+  initDB().then(async(db)=>{
+    const result = await db.collection('users').find({}).toArray();
+    if(result){
       res.status(200).json({
         'status':true,
-        'data':result
+        'result':result
       });
-    });
     }
   });
 });
@@ -302,89 +184,82 @@ app.get('/api/all-users', (req,res)=>{
 app.post("/api/register-restaurant", (req,res)=>{
   const data = req.body;
 
-  db.serialize((err)=>{
-    if(err){
-      console.log("Connection Error: ",err);
-      res.status(500).json({error: "Database Connection error"});
+  initDB().then(async(db)=>{
+    const result = await db.collection('restaurants').insertOne(data);
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'message':'Restaurant added'
+      });
     }else{
-      // check if the requested user is 'owner'
-      db.get(`SELECT user_type FROM users WHERE id=${data.user_id}`,(err,result)=>{
-        if(err){
-          console.log('Query Error: ',err);
-          return res.status(500).json({error:"Database Query error"});
-        }else{
-          if(result.user_type=='owner'){
-            //Create SQL query with parameterized values
-            const sqlQuery = `INSERT INTO restaurants (name, address, city, state, phone1, phone2, type, ethnicity, table_capacity, service_type, location, owner) 
-                                VALUES ('${data.name}','${data.address}','${data.city}','${data.state}',${data.phone1},${data.phone2 ? data.phone2 : null},'${data.type}',
-                                '${data.ethnicity ? data.ethnicity : null}',${data.table_capacity},'${data.service_type}','${data.location ? data.location : null}',${data.user_id});`;
-            
-            db.serialize((err)=>{
-              if(err){
-                console.log('Error connecting for insert into restaurant: ',err);
-              }
-              db.run(sqlQuery, (err, result) => {
-                if (err) {
-                  console.log("Query Error: ", err);
-                  return res.status(500).json({ error: "Database Query error" });
-                } else {
-                  res.status(200).json({ message: "Restaurant registered" });
-                }
-              });
-            });
-          }else{
-            res.json({data:result ,message:'You are not eligible to register a restaurant.'});
-          }
-        }
+      res.status(500).json({
+        'status':false,
+        'message':'Unexpected error occured'
       });
     }
   });
 
-  
 });
 
 // update restaurant information
 app.post('/api/update-restaurant', (req,res)=>{
   const data = req.body;
-  const sqlQuery = `UPDATE restaurants SET ${data.name ? `name='${data.name}',` : ''}
-                                           ${data.address ? `address='${data.address}',` : ''}
-                                           ${data.city ? `city='${data.city}',`:''}
-                                           ${data.state ? `state='${data.state}',`:''}
-                                           ${data.phone1 ? `phone1=${data.phone1},`:''}
-                                           ${data.phone2 ? `phone2=${data.phone2},`:''}
-                                           ${data.type ? `type='${data.type}',`:''}
-                                           ${data.ethnicity ? `ethnicity='${data.ethnicity}',`:''}
-                                           ${data.table_capacity ? `table_capacity=${data.table_capacity},`:''}
-                                           ${data.service_type ? `service_type='${data.service_type}',`:''}
-                                           ${data.location ? `location='${data.location}',`:''}
-                                           owner=${data.user_id}
-                                      WHERE id=${data.id};`;
-  db.serialize((err)=>{
-    if (err) {console.log("Connection error", err);return res.status(500).json({ 'error': err });}
-  
-    db.run(sqlQuery,(err,result)=>{
-      if (err) {
-        console.log(err);
-      }
-      res.status(200).json({'status':true,'message':'Restaurant Updated Sussessfully'});
-    });
+
+  const query = {$set: {
+    name: data.name,
+    address: data.address,
+    city: data.city,
+    state: data.state,
+    phone1: data.phone1,
+    phone2: data.phone2,
+    type: data.type,
+    ethnicity: data.ethnicity,
+    table_capacity: data.table_capacity,
+    service_type: data.service_type,
+    location: data.location,
+  }};
+  initDB().then(async(db)=>{
+    const result = await db.collection('restaurants').updateOne({'_id':data.user_id},data);
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'message':'Restaurant updated successfully'
+      });
+    }else{
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
+      });
+    }
   });
 });
 
 // get restaurant by id
 app.get('/api/get-restaurant/:id',(req,res)=>{
-  db.serialize((err)=>{
-    if(err){console.log("Connection Error- Connectiong to fetch restaurant: \n ",err)}
-    else{
-      db.get(`SELECT * FROM restaurants WHERE id=${req.params.id};`,(err,result)=>{
-        if(err){
-          console.log('Query Error- Querying to fetch restaurant by id: \n',err);
-        }else{
-          res.status(200).json({
-            status:true,
-            data:result,
-          });
-        }
+  initDB().then(async(db)=>{
+    const result = await db.collection('restaurants').findOne({'_id':req.params.id});
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'result':result
+      });
+    }else{
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
+      });
+    }
+  });
+});
+
+//to fetch restaurants for owners
+app.post('/api/show-restaurants',(req,res)=>{
+  initDB().then(async(db)=>{
+    const restaurants = await db.collection('restaurants').find({'owner':req.id}).toArray();
+    if(restaurants){
+      res.status(200).json({
+        'status':true,
+        'restaurants':restaurants
       });
     }
   });
@@ -421,16 +296,19 @@ app.post("/api/restaurants", (req, res) => {
 
 // get all restaurants
 app.get('/api/all-restaurants',(req,res)=>{
-  db.serialize((err)=>{
-    if(err){
-      console.log('Error connecting', err)
+  initDB().then(async(db)=>{
+    const result = await db.collection('restaurants').find({}).toArray();
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'result':result
+      });
+    }else{
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
+      });
     }
-    db.all('SELECT * FROM restaurants;', (err,result)=>{
-      if(err){
-        console.log('Error fetching restaurants: ',err);
-      }
-      res.status(200).json({'status':true,'data':result});
-    });
   });
 });
 
@@ -439,16 +317,18 @@ app.post('/api/create-menu', upload.single('image'),(req,res)=>{
   const formdata = req.body;
   const image = req.file;
 
-  db.serialize((err)=>{
-    if(err)console.log('Menu create: Connection Error: ',err);
-    else{
-      db.run(`INSERT INTO menu (type,food_item,food_desc,price,food_image_url,restaurant_id) VALUES(
-        '${formdata.type}','${formdata.food_item}','${formdata.food_desc}',${formdata.price},'${image.path}',${formdata.restaurant_id});`,(err,result)=>{
-          if(err) res.status(500).json({'Error':err,'result':result});
-          else{
-            res.status(200).json({'message':'Menu Item created'});
-          }
-        });
+  initDB().then(async(db)=>{
+    const result = await db.collection('menu').insertOne(formdata);
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'message':'Menu Item created'
+      });
+    }else{
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
+      });
     }
   });
 });
@@ -456,18 +336,19 @@ app.post('/api/create-menu', upload.single('image'),(req,res)=>{
 // get menu list from the restaurant id
 app.get('/api/menu/:id',(req,res)=>{
   const id = req.params.id;
-  db.serialize((err)=>{
-    if (err) console.log("Menu get: Connection Error: ", err);
-    db.all(
-      `SELECT * FROM menu WHERE restaurant_id=${id};`,(err,result)=>{
-        if(err) {res.send(err);}
-        else{res.json({
-          status:true,
-          length:result.length,
-          data:result
-        });}
-      }
-    );
+  initDB().then(async(db)=>{
+    const result = await db.collection('menu').find({'_id':req.params.id}).toArray();
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'result':result
+      });
+    }else{
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
+      });
+    }
   });
 });
 
@@ -475,29 +356,35 @@ app.get('/api/menu/:id',(req,res)=>{
 app.post('/api/update-menu', upload.single('image'),(req,res)=>{
   const formdata = req.body;
   const foodImage = req.file;
-  const sqlQuery = `UPDATE menu SET ${formdata.food_item? `food_item='${formdata.food_item}'`:''}
-                                    ${formdata.food_desc? `, food_desc='${formdata.food_desc}'`:''}
-                                    ${formdata.type? `, type='${formdata.type}'`:''}
-                                    ${formdata.price? `, price=${formdata.price}`:''}
-                                    ${foodImage? `, food_image_url='${foodImage.path}'`:''} WHERE id=${formdata.id};`
-  
-  db.serialize((err)=>{
-    if(err){
-      res.status(500).json({'error_type':'update menu error connection: ','error': err});
+
+  const query = {$set:{
+    food_item: formdata.food_item,
+    food_desc: formdata.food_desc,
+    type: formdata.type,
+    price: formdata.price,
+    food_image_url:foodImage.path,
+  }};
+
+  initDB().then(async(db)=>{
+    const result = db.collection('menu').updateOne({'_id':formdata.id},query);
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'message':'Menu item updated Successfully'
+      });
     }else{
-      db.run(sqlQuery,(err,result)=>{
-        if(err){
-          res.status(500).json({'error_type':'Update menu query error','error': err});
-        }else{
-          res.status(200).json({'response':'Menu Item Updated'});
-        }
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
       });
     }
   });
 });
 
+//bookings by user
 app.get('/api/get-bookings/:id',(req,res)=>{
   const sqlQuery = `SELECT r.name, r.address, r.phone1, r.phone2, b.booking_date, b.id, b.table_no, b.user_id, b.visit_date, b.visit_time, b.details FROM bookings b JOIN restaurants r ON b.restaurant_id=r.id WHERE user_id=${req.params.id} ORDER BY visit_date DESC;`;
+    
   db.serialize((err)=>{
     if (err) console.log("Connection Error: ", err);
     db.all(sqlQuery,(err,result)=>{
@@ -513,40 +400,40 @@ app.get('/api/get-bookings/:id',(req,res)=>{
   });
 });
 
+//create booking
 app.post('/api/booking',(req,res)=>{
   const data = req.body;
-  db.serialize((err)=>{
-    if (err){
-      console.log("Connection Error: ", err);
+  initDB().then(async(db)=>{
+    const result = await db.collection('bookings').insertOne(data);
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'message':'A table has been booked for you. We welcome your visit.'
+      });
     }else{
-      db.run(`INSERT INTO bookings (user_id, restaurant_id,  table_no, details, guests, booking_date, visit_date, visit_time) 
-        VALUES (${data.user_id}, ${data.restaurant_id}, ${data.table_no}, '${data.details}', ${data.guests},'${data.booking_date}',
-        '${data.visit_date}', '${data.visit_time}');`,(err,result)=>{
-          if(err){ 
-            console.log('Error: ',err);
-          }else{res.status(200).json({
-            'message':'A table has been booked for you. We welcome your visit.',
-            'status':true
-          });}
-        }
-      );
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
+      });
     }
-
   });
+
 });
 
+//add review for restaurant
 app.post('/api/add-review', (req,res)=>{
   const data = req.body;
-  db.serialize((err)=>{
-    if(err) console.log('Connection Error: ',err);
-    else{
-      db.run(
-        `INSERT INTO reviews (user_id, restaurant_id, review, rating) VALUES (${data.user_id},${data.restaurant_id},'${data.review}',${data.rating});`
-      ,(err,result)=>{
-        if(err){res.status(500).json({'error':err,'error_details':'Review add error'})}
-        else{
-          res.status(200).json({'Result':'Review Added'});
-        }
+  initDB().then(async(db)=>{
+    const result = await db.collection('reviews').insertOne(data);
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'message':'Your review has been submitted'
+      });
+    }else{
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
       });
     }
   });
