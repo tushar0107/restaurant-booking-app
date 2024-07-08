@@ -2,13 +2,13 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const sqlite = require('sqlite3').verbose();
-const {MongoClient, ServerApiVersion} = require('mongodb');
+const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 
 const uri = "mongodb+srv://test_user:Tushar172001@my-cluster.snudrh9.mongodb.net/?retryWrites=true&w=majority&appName=my-cluster";
 
 const client = new MongoClient(uri);
 
-async function initDB(){
+const initDB = async()=>{
   try {
     await client.connect();
     const db = client.db('restrodb');
@@ -19,17 +19,16 @@ async function initDB(){
   }
 };
 
-initDB().then(async(db)=>{
-  await db.createCollection('users');
-  await db.createCollection('restaurants');
-  await db.createCollection('menu');
-  await db.createCollection('food_item');
-  await db.createCollection('bookings');
-  await db.createCollection('reviews');
-});
+// initDB().then(async(db)=>{
+//   await db.createCollection('users');
+//   await db.createCollection('restaurants');
+//   await db.createCollection('menu');
+//   await db.createCollection('food_item');
+//   await db.createCollection('bookings');
+//   await db.createCollection('reviews');
+// });
 
 const multer = require('multer');//for proccessing image files
-// const {Pool} = require('pg');
 var cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
@@ -237,7 +236,7 @@ app.post('/api/update-restaurant', (req,res)=>{
 // get restaurant by id
 app.get('/api/get-restaurant/:id',(req,res)=>{
   initDB().then(async(db)=>{
-    const result = await db.collection('restaurants').findOne({'_id':req.params.id});
+    const result = await db.collection('restaurants').findOne({'_id':new ObjectId(req.params.id)});
     if(result){
       res.status(200).json({
         'status':true,
@@ -269,29 +268,47 @@ app.post('/api/show-restaurants',(req,res)=>{
 // post restaurants list based on filter
 app.post("/api/restaurants", (req, res) => {
   const filter = req.body;
-  // Prepare SQL query with parameterized values
-  const sqlQuery = `SELECT * FROM restaurants WHERE 1=1 
-                    ${filter.name ? `AND name LIKE '%${filter.name}%'` : ''}
-                    ${filter.city ? `AND city LIKE '${filter.city}'` : ''}
-                    ${filter.type ? `AND type='${filter.type}'` : ''}
-                    ${filter.ethnicity ? `AND ethnicity='${filter.ethnicity}'` : ''}
-                    ${filter.table_capacity ? `AND table_capacity >= ${filter.table_capacity}` : ''}
-                    ${filter.service_type ? `AND service_type='${filter.service_type}'` : ''}`;
-    db.serialize((err) => {
-      if (err) {console.log("Connection error", err);return res.status(500).json({ error: "Database connection error" });}
-      db.all(sqlQuery,(err, result) => {
-          if (err) {
-            console.log(err);
-            return res.status(500).json({ error: "Database query error" });
-          }else{
-            res.json({
-              length:result.length,
-              data:result,
-            });
-          }
-        }
-      );
-    });
+  const qName = filter.name ? new RegExp(filter.name, 'gi') : null;
+  const qCity = filter.city ? new RegExp(filter.city, 'gi') : null;
+  const qEthnicity = filter.ethnicity ? new RegExp(filter.ethnicity, 'gi') : null;
+
+  const query = {
+    $or: [
+      qName ? { name: qName } : {},
+      qCity ? { city: qCity } : {},
+      qEthnicity ? { ethnicity: qEthnicity } : {}
+    ]
+  };
+
+  if (filter.type || filter.table_capacity || filter.service_type) {
+    query.$or = [];
+  
+    if (filter.type) {
+      query.$or.push({ type: filter.type });
+    }
+  
+    if (filter.table_capacity) {
+      query.$or.push({ table_capacity: { $gte: filter.table_capacity } });
+    }
+  
+    if (filter.service_type) {
+      query.$or.push({ service_type: filter.service_type });
+    }
+  }
+
+  initDB().then(async(db)=>{
+    const result = await db.collection("restaurants").find(query).toArray();
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'result':result
+      });
+    }else{
+      res.status(500).json({
+        'error':'Error in fetching restaurants'
+      });
+    }
+  });
   });
 
 // get all restaurants
@@ -383,20 +400,29 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
 
 //bookings by user
 app.get('/api/get-bookings/:id',(req,res)=>{
-  const sqlQuery = `SELECT r.name, r.address, r.phone1, r.phone2, b.booking_date, b.id, b.table_no, b.user_id, b.visit_date, b.visit_time, b.details FROM bookings b JOIN restaurants r ON b.restaurant_id=r.id WHERE user_id=${req.params.id} ORDER BY visit_date DESC;`;
-    
-  db.serialize((err)=>{
-    if (err) console.log("Connection Error: ", err);
-    db.all(sqlQuery,(err,result)=>{
-      if(err) res.send(err);
-        else{
-          res.json({
-          'length':result.length,
-          'data':result,
-          'status':true
-        });
+  
+  initDB().then(async(db)=>{
+    const result = await db.collection('bookings').aggregate([
+      {
+        $lookup: {
+          from:'restaurants',
+          localField: 'restaurant_id',
+          foreignField: '_id',
+          as:'restaurant'
+        }
       }
-    });
+    ]).toArray();
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'result':result
+      });
+    }else{
+      res.status(500).json({
+        'status':false,
+        'message':'Error in fetching bookings'
+      });
+    }
   });
 });
 
@@ -482,4 +508,5 @@ ws.on('connection', (socket,req)=>{
 
 server.listen(port,function(){
     console.log(`Listening on port ${port}`);
+
 });
