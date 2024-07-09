@@ -89,6 +89,7 @@ app.post("/api/login", (req, res) => {
   initDB().then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
+      console.log(result);
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
         res.status(200).json({
           'status':true,
@@ -101,7 +102,7 @@ app.post("/api/login", (req, res) => {
         });
       }
     }else{ //for mobile not found
-      res.status(404).json({
+      res.status(200).json({
         'status':false,
         'message':'Mobile Number not found'
       });
@@ -273,7 +274,7 @@ app.post("/api/restaurants", (req, res) => {
   const qEthnicity = filter.ethnicity ? new RegExp(filter.ethnicity, 'gi') : null;
 
   const query = {
-    $or: [
+    $and: [
       qName ? { name: qName } : {},
       qCity ? { city: qCity } : {},
       qEthnicity ? { ethnicity: qEthnicity } : {}
@@ -403,14 +404,15 @@ app.get('/api/get-bookings/:id',(req,res)=>{
   
   initDB().then(async(db)=>{
     const result = await db.collection('bookings').aggregate([
-      {
+      { $match: { user_id: new ObjectId(req.params.id) } },{
         $lookup: {
           from:'restaurants',
           localField: 'restaurant_id',
           foreignField: '_id',
           as:'restaurant'
         }
-      }
+      },
+      {$unwind: '$restaurant'}
     ]).toArray();
     if(result){
       res.status(200).json({
@@ -429,6 +431,7 @@ app.get('/api/get-bookings/:id',(req,res)=>{
 //create booking
 app.post('/api/booking',(req,res)=>{
   const data = req.body;
+  console.log(data);
   initDB().then(async(db)=>{
     const result = await db.collection('bookings').insertOne(data);
     if(result){
