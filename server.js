@@ -47,6 +47,8 @@ var corsOptions = {
 };
 app.use(cors(corsOptions));
 
+app.options('*', cors())
+
 app.use('/static', express.static('public'));
 app.use('/uploads', express.static('uploads'));
 
@@ -70,7 +72,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({storage: storage});
 
-app.options('*', cors())
 
 
 // root site
