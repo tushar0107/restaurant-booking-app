@@ -40,10 +40,9 @@ const app = express();
 const bodyParser = require('body-parser');
 
 var corsOptions = {
-  origin: 'https://https://restaurant-booking-frontend-henna.vercel.app/',
+  origin: 'https://restaurant-booking-frontend-henna.vercel.app/',
   optionsSuccessStatus:200
 };
-
 app.use(cors(corsOptions));
 
 app.use('/static', express.static('public'));
