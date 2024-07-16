@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const sqlite = require('sqlite3').verbose();
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 
 const uri = "mongodb+srv://"+process.env.URI;
@@ -40,7 +39,12 @@ var port = process.env.PORT;
 const app = express();
 const bodyParser = require('body-parser');
 
-app.use(cors());
+var corsOptions = {
+  origin: 'https://https://restaurant-booking-frontend-henna.vercel.app/',
+  optionsSuccessStatus:200
+};
+
+app.use(cors(corsOptions));
 
 app.use('/static', express.static('public'));
 app.use('/uploads', express.static('uploads'));
