@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 const sqlite = require('sqlite3').verbose();
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 
-const uri = "mongodb+srv://test_user:Tushar172001@my-cluster.snudrh9.mongodb.net/?retryWrites=true&w=majority&appName=my-cluster";
+const uri = "mongodb+srv://"+process.env.URI;
 
 const client = new MongoClient(uri);
 
