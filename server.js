@@ -11,7 +11,7 @@ const initDB = async()=>{
   try {
     await client.connect();
     const db = client.db('restrodb');
-    console.log('Connected to database.')
+    console.log('Connected to database.');
     return db;
   }catch(e){
     console.log('Error initializing database: ',e)
@@ -40,7 +40,7 @@ const app = express();
 const bodyParser = require('body-parser');
 
 var corsOptions = {
-  origin: 'https://restaurant-booking-frontend-henna.vercel.app',
+  origin: process.env.ORIGIN,
   methods: 'GET,POST',
   credentials: true,
   optionsSuccessStatus:200
@@ -95,7 +95,6 @@ app.post("/api/login", (req, res) => {
   initDB().then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
-      console.log(result);
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
         res.status(200).json({
           'status':true,
