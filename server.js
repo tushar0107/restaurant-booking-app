@@ -39,8 +39,8 @@ var port = process.env.PORT;
 const app = express();
 const bodyParser = require('body-parser');
 
+
 var corsOptions = {
-  origin: process.env.ORIGIN,
   methods: 'GET,POST',
   credentials: true,
   optionsSuccessStatus:200
@@ -482,24 +482,22 @@ const users = {};
 ws.on('connection', (socket,req)=>{
   const userId = req.url.split('/').pop();
   users[userId] = socket;
-  
+ 
 
   socket.on("message", (msg)=>{
-    console.log(msg.toString());
     const data = JSON.parse(msg);
-    console.log('data',data);
-    const user = users[data.receiver];
-    const sender = data.sender;
+    const receiver = users[data.receiver];
+    const sender = users[data.sender];
 
-    if(user !==undefined){
-      if(user !== socket && user.readyState === WebSocket.OPEN){
-        console.log(msg.toString());
-      }else if(user !== socket && user.readyState !== WebSocket.OPEN){
-        sender.send(JSON.stringify({status:'offline',user:userId}));
+    if(receiver !==undefined){
+      if(receiver.readyState === WebSocket.OPEN){
+      receiver.send(msg.toString());
+      }else if(receiver.readyState !== WebSocket.OPEN){
+        sender.send(JSON.stringify({status:'offline',user:data.recipient}));
       }
     }else{
       if(sender === socket && sender.readyState === WebSocket.OPEN){
-        sender.send(JSON.stringify(msg.toString()));
+        sender.send(JSON.stringify({status:'not connected',user:data.recipient}));
       }
     }
   });
