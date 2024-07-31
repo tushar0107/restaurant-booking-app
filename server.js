@@ -3,7 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 
-const uri = "mongodb+srv://"+process.env.URI;
+const uri = "mongodb+srv://test_user:Tushar172001@my-cluster.snudrh9.mongodb.net/?retryWrites=true&w=majority&appName=my-cluster";
 
 const client = new MongoClient(uri);
 
@@ -40,7 +40,6 @@ const app = express();
 const bodyParser = require('body-parser');
 
 var corsOptions = {
-  origin: 'https://restaurant-booking-frontend-henna.vercel.app',
   methods: 'GET,POST',
   credentials: true,
   optionsSuccessStatus:200
@@ -474,6 +473,115 @@ app.post('/api/add-review', (req,res)=>{
   });
 });
 
+const chatDB = async()=>{
+  try {
+    await client.connect();
+    const db = client.db('chat-db');
+    return db;
+  }catch(e){
+    console.log('Error initializing database: ',e)
+  }
+};
+
+app.get('/api/chat-users',(req,res)=>{
+  chatDB().then(async(db)=>{
+    const result = await db.collection('users').find().toArray();
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'result':result
+      });
+    }else{
+      res.status(500).json({
+        'status':false,
+        'message':'Unable to fetch users'
+      });
+    }
+  });
+});
+app.get('/api/get-messages/:sender/:receiver',(req,res)=>{
+  const sender = req.params.sender;
+  const receiver = req.params.receiver;
+  chatDB().then(async(db)=>{
+    const result = await db.collection("messages").find({
+        $or: [
+          {
+            $and: [
+              { sender: sender },
+              { receiver: receiver },
+            ],
+          },
+          {
+            $and: [
+              { sender: receiver },
+              { receiver: sender },
+            ],
+          },
+        ],
+      })
+      .toArray();
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'messages':result
+      });
+    }else{
+      res.status(404).json({
+        'status':false,
+        'error':'No messages found'
+      });
+    }
+  });
+});
+
+app.post('/api/get-messages',(req,res)=>{
+  const sender = req.body.sender;
+  const receiver = req.body.receiver;
+  chatDB().then(async(db)=>{
+    const result = await db.collection("messages").find({
+        $or: [
+          {
+            $and: [
+              { sender: sender },
+              { receiver: receiver },
+            ],
+          },
+          {
+            $and: [
+              { sender: receiver },
+              { receiver: sender },
+            ],
+          },
+        ],
+      }).sort({"sent": -1})
+      .toArray();
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'messages':result
+      });
+    }else{
+      res.status(404).json({
+        'status':false,
+        'error':'No messages found'
+      });
+    }
+  });
+});
+
+app.post('/api/add-message',(req,res)=>{
+  const message = req.body.message;
+  chatDB().then(async(db)=>{
+    const result = await db.collection('messages').insertOne(message);
+    if(result){
+      res.status(200).json({
+        'status':true,
+        'result':result,
+      });
+    }
+  });
+});
+
 
 
 const ws = new WebSocket.Server({server:server});
@@ -483,24 +591,26 @@ const users = {};
 ws.on('connection', (socket,req)=>{
   const userId = req.url.split('/').pop();
   users[userId] = socket;
-  
+
 
   socket.on("message", (msg)=>{
-    console.log(msg.toString());
-    const data = JSON.parse(msg);
-    console.log('data',data);
-    const user = users[data.receiver];
-    const sender = data.sender;
+    const data = JSON.parse(msg.toString());
+    const receiver = users[data.receiver];
+    const sender = users[data.sender];
 
-    if(user !==undefined){
-      if(user !== socket && user.readyState === WebSocket.OPEN){
-        console.log(msg.toString());
-      }else if(user !== socket && user.readyState !== WebSocket.OPEN){
-        sender.send(JSON.stringify({status:'offline',user:userId}));
+    chatDB().then(async(db)=>{
+      await db.collection('messages').insertOne(data);
+    });
+
+    if(receiver !== undefined){
+      if(receiver == socket && receiver.readyState === WebSocket.OPEN){
+        receiver.send(JSON.stringify(msg.toString()));
+      }else if(receiver == socket && receiver.readyState != WebSocket.OPEN){
+        sender.send(JSON.stringify({status:'offline',user:data.receiver}));
       }
     }else{
       if(sender === socket && sender.readyState === WebSocket.OPEN){
-        sender.send(JSON.stringify(msg.toString()));
+        sender.send(JSON.stringify({status:'Not connected',user:data.receiver}));
       }
     }
   });
@@ -512,10 +622,12 @@ ws.on('connection', (socket,req)=>{
   socket.on('close', (event)=>{
     console.log('websocket closed: ',event);
   });
+
 });
 
 
 server.listen(port,function(){
     console.log(`Listening on port ${port}`);
+
 
 });
