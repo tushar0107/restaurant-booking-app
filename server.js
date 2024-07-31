@@ -11,7 +11,7 @@ const initDB = async()=>{
   try {
     await client.connect();
     const db = client.db('restrodb');
-    console.log('Connected to database.')
+    console.log('Connected to database.');
     return db;
   }catch(e){
     console.log('Error initializing database: ',e)
@@ -38,6 +38,7 @@ var port = process.env.PORT;
 
 const app = express();
 const bodyParser = require('body-parser');
+
 
 var corsOptions = {
   methods: 'GET,POST',
@@ -94,7 +95,6 @@ app.post("/api/login", (req, res) => {
   initDB().then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
-      console.log(result);
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
         res.status(200).json({
           'status':true,
@@ -591,8 +591,7 @@ const users = {};
 ws.on('connection', (socket,req)=>{
   const userId = req.url.split('/').pop();
   users[userId] = socket;
-
-
+  
   socket.on("message", (msg)=>{
     const data = JSON.parse(msg.toString());
     const receiver = users[data.receiver];
@@ -631,3 +630,4 @@ server.listen(port,function(){
 
 
 });
+
