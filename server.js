@@ -124,8 +124,16 @@ app.post("/api/register-user", (req,res)=>{
   data.password = hashedPassword;
 
   initDB().then(async(db)=>{
-    const result = await db.collection('users').insertOne(data);
-    res.status(200).json({'status':true,'result':result});
+    const result = await db.collection('users').find({mobile:data.mobile}).toArray();
+    if(result.length < 1){
+      const result = await db.collection('users').insertOne(data);
+      res.status(200).json({'status':true,'result':result});
+    }else{
+      res.result(200).json({
+        'status':false,
+        'message':'Mobile number already exists'
+      });
+    }
   });
 });
 
@@ -482,6 +490,54 @@ const chatDB = async()=>{
     console.log('Error initializing database: ',e)
   }
 };
+
+app.post("/api/chat-register", (req,res)=>{
+  const data = req.body;
+  //converts user's plain password to hashed password
+  const hashedPassword = bcrypt.hashSync(data.password,8);
+  data.password = hashedPassword;
+
+  chatDB().then(async(db)=>{
+    const result = await db.collection('users').find({mobile:data.mobile}).toArray();
+    if(result.length < 1){
+      const result = await db.collection('users').insertOne(data);
+      res.status(200).json({'status':true,'result':result});
+    }else{
+      res.result(200).json({
+        'status':false,
+        'message':'Mobile number already exists'
+      });
+    }
+  });
+});
+
+//user login api with form data (mobile and password)
+app.post("/api/chat-login", (req, res) => {
+  const mobile = req.body.mobile;
+  const plainPassword = req.body.password;
+
+  initDB().then(async(db)=>{
+    const result = await db.collection('users').findOne({'mobile':mobile});
+    if(result){
+      if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
+        res.status(200).json({
+          'status':true,
+          'user':result,
+        });
+      }else{ // for incorrect password
+        res.status(401).json({
+          'status':false,
+          'message':'Incorrect Password'
+        });
+      }
+    }else{ //for mobile not found
+      res.status(200).json({
+        'status':false,
+        'message':'Mobile Number not found'
+      });
+    }
+  });
+});
 
 app.get('/api/chat-users',(req,res)=>{
   chatDB().then(async(db)=>{
