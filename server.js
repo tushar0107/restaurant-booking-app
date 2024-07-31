@@ -516,7 +516,7 @@ app.post("/api/chat-login", (req, res) => {
   const mobile = req.body.mobile;
   const plainPassword = req.body.password;
 
-  initDB().then(async(db)=>{
+  chatDB().then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
