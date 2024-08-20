@@ -481,6 +481,35 @@ app.post('/api/add-review', (req,res)=>{
   });
 });
 
+
+
+
+// darzo projects apis below
+
+
+var admin = require("firebase-admin");
+
+var serviceAccount = require("./public/v-connex-firebase-adminsdk-e8mj2-ea6dcf9905.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const sendNotification = async(mobile, title, body)=>{
+  await chatDB().then(async(db)=>{
+    const result = await db.collection('fcm-tokens').findOne({mobile:mobile});
+    if(result){
+      await firebaseAdmin.messaging().send({
+        token:result.token,
+        notification:{
+          title,body
+        }
+      });
+    }    
+  });
+}
+
+
 const chatDB = async()=>{
   try {
     await client.connect();
@@ -555,6 +584,22 @@ app.get('/api/chat-users',(req,res)=>{
     }
   });
 });
+
+app.post('/api/get-token',(req,res)=>{
+  const data = req.body.data;
+  chatDB().then(async(db)=>{
+    const result = await db.collection('fcm-tokens').insertOne(data);
+    if(result){
+      res.status(200).json({'status':true,'result':result});
+    }else{
+      res.status(500).json({
+        'status':false,
+        'message':'Unable to submit token'
+      });
+    }
+  });
+});
+
 app.get('/api/get-messages/:sender/:receiver',(req,res)=>{
   const sender = req.params.sender;
   const receiver = req.params.receiver;
@@ -660,6 +705,7 @@ ws.on('connection', (socket,req)=>{
     if(receiver !== undefined){
       if(receiver == socket && receiver.readyState === WebSocket.OPEN){
         receiver.send(JSON.stringify(msg.toString()));
+        sendNotification(receiver,title=sender,body=msg);
       }else if(receiver == socket && receiver.readyState != WebSocket.OPEN){
         sender.send(JSON.stringify({status:'offline',user:data.receiver}));
       }
