@@ -3,7 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 
-const uri = "mongodb+srv://test_user:Tushar172001@my-cluster.snudrh9.mongodb.net/?retryWrites=true&w=majority&appName=my-cluster";
+const uri = `mongodb+srv://test_user:Tushar172001@my-cluster.snudrh9.mongodb.net/?retryWrites=true&w=majority&appName=my-cluster`;
 
 const client = new MongoClient(uri);
 
@@ -489,16 +489,17 @@ app.post('/api/add-review', (req,res)=>{
 
 var admin = require("firebase-admin");
 
-var serviceAccount = require("./public/v-connex-firebase-adminsdk-e8mj2-ea6dcf9905.json");
+var serviceAccount = require("./etc/secrets/v-connex-firebase-adminsdk-e8mj2-ea6dcf9905.json");
 
-admin.initializeApp({
+const firebaseAdmin = admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-const sendNotification = async(mobile, title, body)=>{
-  await chatDB().then(async(db)=>{
+function sendNotification(mobile, title, body){
+  chatDB().then(async(db)=>{
     const result = await db.collection('fcm-tokens').findOne({mobile:mobile});
     if(result){
+      console.log(result);
       await firebaseAdmin.messaging().send({
         token:result.token,
         notification:{
@@ -702,10 +703,10 @@ ws.on('connection', (socket,req)=>{
       await db.collection('messages').insertOne(data);
     });
 
+    sendNotification(receiver,title=sender,body=msg);
     if(receiver !== undefined){
       if(receiver == socket && receiver.readyState === WebSocket.OPEN){
         receiver.send(JSON.stringify(msg.toString()));
-        sendNotification(receiver,title=sender,body=msg);
       }else if(receiver == socket && receiver.readyState != WebSocket.OPEN){
         sender.send(JSON.stringify({status:'offline',user:data.receiver}));
       }
