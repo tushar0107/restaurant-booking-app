@@ -486,26 +486,28 @@ app.post('/api/add-review', (req,res)=>{
 
 // darzo projects apis below
 
+var firebase = require("firebase-admin");
 
-var admin = require("firebase-admin");
+var serviceAccount = require("./etc/secrets/service-account.json");
 
-var serviceAccount = require("./etc/secrets/v-connex-firebase-adminsdk-e8mj2-ea6dcf9905.json");
-
-const firebaseAdmin = admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+firebase.initializeApp({
+  credential: firebase.credential.cert(serviceAccount)
 });
 
 function sendNotification(mobile, title, body){
+  console.log('sending');
   chatDB().then(async(db)=>{
     const result = await db.collection('fcm-tokens').findOne({mobile:mobile});
+    console.log(result);
     if(result){
-      console.log(result);
-      await firebaseAdmin.messaging().send({
+      var res = await firebase.messaging().send({
         token:result.token,
         notification:{
-          title,body
+          title:title,
+          body:body
         }
       });
+      console.log(res);
     }    
   });
 }
