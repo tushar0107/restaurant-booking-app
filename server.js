@@ -730,9 +730,9 @@ ws.on('connection', (socket,req)=>{
     }else{
       if(sender === socket && sender.readyState === WebSocket.OPEN){
         sender.send(JSON.stringify({status:'Not connected',user:data.receiver}));
-        sendNotification(mobile=data.receiver,title=data.sender,body=data.msg);
       }
     }
+    sendNotification(mobile=data.receiver,title=data.sender,body=data.msg);
   });
 
   socket.on('error', (error)=>{
