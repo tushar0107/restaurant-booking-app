@@ -500,7 +500,7 @@ const chatDB = async()=>{
 
 var firebase = require("firebase-admin");
 
-var serviceAccount = require("/etc/secrets/service-account.json");
+var serviceAccount = require("./etc/secrets/service-account.json");
 
 firebase.initializeApp({
   credential: firebase.credential.cert(serviceAccount)
@@ -716,16 +716,16 @@ ws.on('connection', (socket,req)=>{
       await db.collection('messages').insertOne(data);
     });
 
-    sendNotification(mobile=data.receiver,title=data.sender,body=data.msg);
-    if(receiver !== undefined){
-      if(receiver == socket && receiver.readyState === WebSocket.OPEN){
-        receiver.send(JSON.stringify(msg.toString()));
-      }else if(receiver == socket && receiver.readyState != WebSocket.OPEN){
+    if(receiver){
+      if(receiver.readyState === WebSocket.OPEN){
+        receiver.send(msg.toString());
+      }else if(receiver.readyState != WebSocket.OPEN){
         sender.send(JSON.stringify({status:'offline',user:data.receiver}));
       }
     }else{
       if(sender === socket && sender.readyState === WebSocket.OPEN){
         sender.send(JSON.stringify({status:'Not connected',user:data.receiver}));
+        sendNotification(mobile=data.receiver,title=data.sender,body=data.msg);
       }
     }
   });
