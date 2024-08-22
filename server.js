@@ -486,32 +486,6 @@ app.post('/api/add-review', (req,res)=>{
 
 // darzo projects apis below
 
-var firebase = require("firebase-admin");
-
-var serviceAccount = require("/etc/secrets/service-account.json");
-
-firebase.initializeApp({
-  credential: firebase.credential.cert(serviceAccount)
-});
-
-function sendNotification(mobile, title, body){
-  console.log('sending');
-  chatDB().then(async(db)=>{
-    const result = await db.collection('fcm-tokens').findOne({mobile:mobile});
-    console.log(result);
-    if(result){
-      var res = await firebase.messaging().send({
-        token:result.token,
-        notification:{
-          title:title,
-          body:body
-        }
-      });
-      console.log(res);
-    }    
-  });
-}
-
 
 const chatDB = async()=>{
   try {
@@ -522,6 +496,32 @@ const chatDB = async()=>{
     console.log('Error initializing database: ',e)
   }
 };
+
+
+var firebase = require("firebase-admin");
+
+var serviceAccount = require("./etc/secrets/service-account.json");
+
+firebase.initializeApp({
+  credential: firebase.credential.cert(serviceAccount)
+});
+
+async function sendNotification(mobile, title, body){
+  await chatDB().then(async(db)=>{
+    const result = await db.collection('fcm-tokens').findOne({'mobile':mobile});
+    return result;
+  }).then(async(result)=>{
+    if(result){
+      await firebase.messaging().send({
+        token:result.token,
+        notification:{
+          title:title,
+          body:body
+        }
+      });
+    }
+  });
+}
 
 app.post("/api/chat-register", (req,res)=>{
   const data = req.body;
@@ -591,14 +591,25 @@ app.get('/api/chat-users',(req,res)=>{
 app.post('/api/get-token',(req,res)=>{
   const data = req.body.data;
   chatDB().then(async(db)=>{
-    const result = await db.collection('fcm-tokens').insertOne(data);
+    const result = await db.collection('fcm-tokens').findOne({'mobile':data.mobile});
     if(result){
-      res.status(200).json({'status':true,'result':result});
-    }else{
-      res.status(500).json({
-        'status':false,
-        'message':'Unable to submit token'
+      db.collection('fcm-tokens').updateOne({'mobile':data.mobile},{$set:{token:data.token}}).then((res)=>{
+        if(result){
+          res.status(200).json({'status':true,'message':'Token updated'});
+        }else{
+          res.status(500).json({'status':false,'message':'Failed to update token'});
+        }
       });
+    }else{
+      const result = await db.collection('fcm-tokens').insertOne(data);
+      if(result){
+        res.status(200).json({'status':true,'result':result});
+      }else{
+        res.status(500).json({
+          'status':false,
+          'message':'Unable to submit token'
+        });
+      }
     }
   });
 });
@@ -705,7 +716,7 @@ ws.on('connection', (socket,req)=>{
       await db.collection('messages').insertOne(data);
     });
 
-    sendNotification(receiver,title=sender,body=msg);
+    sendNotification(mobile=data.receiver,title=data.sender,body=data.msg);
     if(receiver !== undefined){
       if(receiver == socket && receiver.readyState === WebSocket.OPEN){
         receiver.send(JSON.stringify(msg.toString()));
