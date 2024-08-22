@@ -44,7 +44,6 @@ const bodyParser = require('body-parser');
 
 
 var corsOptions = {
-  origin:'http://localhost',
   methods: 'GET,POST',
   credentials: true,
   optionsSuccessStatus:200
