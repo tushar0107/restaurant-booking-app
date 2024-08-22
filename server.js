@@ -44,6 +44,7 @@ const bodyParser = require('body-parser');
 
 
 var corsOptions = {
+  origin:'http://localhost',
   methods: 'GET,POST',
   credentials: true,
   optionsSuccessStatus:200
@@ -505,7 +506,7 @@ const chatDB = connection();
 
 var firebase = require("firebase-admin");
 
-var serviceAccount = require("./etc/secrets/service-account.json");
+var serviceAccount = require(process.env.SERVICE_ACCOUNT);
 
 firebase.initializeApp({
   credential: firebase.credential.cert(serviceAccount)
