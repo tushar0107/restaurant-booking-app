@@ -500,7 +500,7 @@ const chatDB = async()=>{
 
 var firebase = require("firebase-admin");
 
-var serviceAccount = require("./etc/secrets/service-account.json");
+var serviceAccount = require("/etc/secrets/service-account.json");
 
 firebase.initializeApp({
   credential: firebase.credential.cert(serviceAccount)
