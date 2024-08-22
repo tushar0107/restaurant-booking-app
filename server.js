@@ -1,24 +1,33 @@
 const express = require('express');
+const dotenv = require('dotenv');
+const multer = require('multer');//for proccessing image files
+var cors = require('cors');
+const bcrypt = require('bcrypt');
 const http = require('http');
 const WebSocket = require('ws');
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 
-const uri = `mongodb+srv://test_user:Tushar172001@my-cluster.snudrh9.mongodb.net/?retryWrites=true&w=majority&appName=my-cluster`;
+dotenv.config();
+
+// database configurations
+const uri = process.env.URI;
 
 const client = new MongoClient(uri);
 
+// initialize connection to database
 const initDB = async()=>{
   try {
     await client.connect();
     const db = client.db('restrodb');
-    console.log('Connected to database.');
     return db;
   }catch(e){
-    console.log('Error initializing database: ',e)
+    console.log('Error initializing database: ',e);
   }
 };
 
-// initDB().then(async(db)=>{
+const restroDb = initDB();
+
+// restroDb.then(async(db)=>{
 //   await db.createCollection('users');
 //   await db.createCollection('restaurants');
 //   await db.createCollection('menu');
@@ -27,12 +36,6 @@ const initDB = async()=>{
 //   await db.createCollection('reviews');
 // });
 
-const multer = require('multer');//for proccessing image files
-var cors = require('cors');
-const dotenv = require('dotenv');
-const bcrypt = require('bcrypt');
-
-dotenv.config();
 
 var port = process.env.PORT;
 
@@ -47,7 +50,7 @@ var corsOptions = {
 };
 app.use(cors(corsOptions));
 
-app.options('*', cors())
+app.options('*', cors());
 
 app.use('/static', express.static('public'));
 app.use('/uploads', express.static('uploads'));
@@ -92,7 +95,7 @@ app.post("/api/login", (req, res) => {
   const mobile = req.body.mobile;
   const plainPassword = req.body.password;
 
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
@@ -123,7 +126,7 @@ app.post("/api/register-user", (req,res)=>{
   const hashedPassword = bcrypt.hashSync(data.password,8);
   data.password = hashedPassword;
 
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('users').find({mobile:data.mobile}).toArray();
     if(result.length < 1){
       const result = await db.collection('users').insertOne(data);
@@ -146,7 +149,7 @@ app.post('/api/update-user',function(req,res){
   }else if(!data.password){
     res.status(200).json({'messsage':'Password required'});
   }else{
-    initDB().then(async(db)=>{
+    restroDb.then(async(db)=>{
       const result = await db.collection('users').findOne({'_id':data.id});
       if(result){
         if(bcrypt.compareSync(data.password,result.password)){//compare password
@@ -159,7 +162,7 @@ app.post('/api/update-user',function(req,res){
             email: data.email,
             user_type: data.user_type
           }};
-          initDB().then(async(db)=>{
+          restroDb.then(async(db)=>{
             const result = await db.collection('users').updateOne({'_id':data.id},query);
             if(result){
               res.status(200).json({
@@ -181,7 +184,7 @@ app.post('/api/update-user',function(req,res){
 
 //fetch all users in the database
 app.get('/api/all-users', (req,res)=>{
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('users').find({}).toArray();
     if(result){
       res.status(200).json({
@@ -197,7 +200,7 @@ app.get('/api/all-users', (req,res)=>{
 app.post("/api/register-restaurant", (req,res)=>{
   const data = req.body;
 
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('restaurants').insertOne(data);
     if(result){
       res.status(200).json({
@@ -231,7 +234,7 @@ app.post('/api/update-restaurant', (req,res)=>{
     service_type: data.service_type,
     location: data.location,
   }};
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('restaurants').updateOne({'_id':data.user_id},data);
     if(result){
       res.status(200).json({
@@ -249,7 +252,7 @@ app.post('/api/update-restaurant', (req,res)=>{
 
 // get restaurant by id
 app.get('/api/get-restaurant/:id',(req,res)=>{
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('restaurants').findOne({'_id':new ObjectId(req.params.id)});
     if(result){
       res.status(200).json({
@@ -267,7 +270,7 @@ app.get('/api/get-restaurant/:id',(req,res)=>{
 
 //to fetch restaurants for owners
 app.post('/api/show-restaurants',(req,res)=>{
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const restaurants = await db.collection('restaurants').find({'owner':req.id}).toArray();
     if(restaurants){
       res.status(200).json({
@@ -310,7 +313,7 @@ app.post("/api/restaurants", (req, res) => {
     }
   }
 
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection("restaurants").find(query).toArray();
     if(result){
       res.status(200).json({
@@ -327,7 +330,7 @@ app.post("/api/restaurants", (req, res) => {
 
 // get all restaurants
 app.get('/api/all-restaurants',(req,res)=>{
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('restaurants').find({}).toArray();
     if(result){
       res.status(200).json({
@@ -348,7 +351,7 @@ app.post('/api/create-menu', upload.single('image'),(req,res)=>{
   const formdata = req.body;
   const image = req.file;
 
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('menu').insertOne(formdata);
     if(result){
       res.status(200).json({
@@ -367,7 +370,7 @@ app.post('/api/create-menu', upload.single('image'),(req,res)=>{
 // get menu list from the restaurant id
 app.get('/api/menu/:id',(req,res)=>{
   const id = req.params.id;
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('menu').find({'_id':req.params.id}).toArray();
     if(result){
       res.status(200).json({
@@ -396,7 +399,7 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
     food_image_url:foodImage.path,
   }};
 
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = db.collection('menu').updateOne({'_id':formdata.id},query);
     if(result){
       res.status(200).json({
@@ -415,7 +418,7 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
 //bookings by user
 app.get('/api/get-bookings/:id',(req,res)=>{
   
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('bookings').aggregate([
       { $match: { user_id: new ObjectId(req.params.id) } },{
         $lookup: {
@@ -445,7 +448,7 @@ app.get('/api/get-bookings/:id',(req,res)=>{
 app.post('/api/booking',(req,res)=>{
   const data = req.body;
   console.log(data);
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('bookings').insertOne(data);
     if(result){
       res.status(200).json({
@@ -465,7 +468,7 @@ app.post('/api/booking',(req,res)=>{
 //add review for restaurant
 app.post('/api/add-review', (req,res)=>{
   const data = req.body;
-  initDB().then(async(db)=>{
+  restroDb.then(async(db)=>{
     const result = await db.collection('reviews').insertOne(data);
     if(result){
       res.status(200).json({
@@ -487,7 +490,7 @@ app.post('/api/add-review', (req,res)=>{
 // darzo projects apis below
 
 
-const chatDB = async()=>{
+const connection = async()=>{
   try {
     await client.connect();
     const db = client.db('chat-db');
@@ -496,6 +499,8 @@ const chatDB = async()=>{
     console.log('Error initializing database: ',e)
   }
 };
+
+const chatDB = connection();
 
 
 var firebase = require("firebase-admin");
@@ -507,7 +512,7 @@ firebase.initializeApp({
 });
 
 async function sendNotification(mobile, title, body){
-  await chatDB().then(async(db)=>{
+  await chatDB.then(async(db)=>{
     const result = await db.collection('fcm-tokens').findOne({'mobile':mobile});
     return result;
   }).then(async(result)=>{
@@ -529,7 +534,7 @@ app.post("/api/chat-register", (req,res)=>{
   const hashedPassword = bcrypt.hashSync(data.password,8);
   data.password = hashedPassword;
 
-  chatDB().then(async(db)=>{
+  chatDB.then(async(db)=>{
     const result = await db.collection('users').find({mobile:data.mobile}).toArray();
     if(result.length < 1){
       const result = await db.collection('users').insertOne(data);
@@ -548,7 +553,7 @@ app.post("/api/chat-login", (req, res) => {
   const mobile = req.body.mobile;
   const plainPassword = req.body.password;
 
-  chatDB().then(async(db)=>{
+  chatDB.then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
@@ -572,7 +577,7 @@ app.post("/api/chat-login", (req, res) => {
 });
 
 app.get('/api/chat-users',(req,res)=>{
-  chatDB().then(async(db)=>{
+  chatDB.then(async(db)=>{
     const result = await db.collection('users').find().toArray();
     if(result){
       res.status(200).json({
@@ -590,7 +595,7 @@ app.get('/api/chat-users',(req,res)=>{
 
 app.post('/api/get-token',(req,res)=>{
   const data = req.body.data;
-  chatDB().then(async(db)=>{
+  chatDB.then(async(db)=>{
     const result = await db.collection('fcm-tokens').findOne({'mobile':data.mobile});
     if(result){
       db.collection('fcm-tokens').updateOne({'mobile':data.mobile},{$set:{token:data.token}}).then((res)=>{
@@ -617,7 +622,7 @@ app.post('/api/get-token',(req,res)=>{
 app.get('/api/get-messages/:sender/:receiver',(req,res)=>{
   const sender = req.params.sender;
   const receiver = req.params.receiver;
-  chatDB().then(async(db)=>{
+  chatDB.then(async(db)=>{
     const result = await db.collection("messages").find({
         $or: [
           {
@@ -652,7 +657,7 @@ app.get('/api/get-messages/:sender/:receiver',(req,res)=>{
 app.post('/api/get-messages',(req,res)=>{
   const sender = req.body.sender;
   const receiver = req.body.receiver;
-  chatDB().then(async(db)=>{
+  chatDB.then(async(db)=>{
     const result = await db.collection("messages").find({
         $or: [
           {
@@ -686,7 +691,7 @@ app.post('/api/get-messages',(req,res)=>{
 
 app.post('/api/add-message',(req,res)=>{
   const message = req.body.message;
-  chatDB().then(async(db)=>{
+  chatDB.then(async(db)=>{
     const result = await db.collection('messages').insertOne(message);
     if(result){
       res.status(200).json({
@@ -712,7 +717,7 @@ ws.on('connection', (socket,req)=>{
     const receiver = users[data.receiver];
     const sender = users[data.sender];
 
-    chatDB().then(async(db)=>{
+    chatDB.then(async(db)=>{
       await db.collection('messages').insertOne(data);
     });
 
