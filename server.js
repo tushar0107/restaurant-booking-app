@@ -595,11 +595,11 @@ app.get('/api/chat-users',(req,res)=>{
 });
 
 app.post('/api/get-token',(req,res)=>{
-  const data = req.body.data;
+  const data = req.body;
   chatDB.then(async(db)=>{
     const result = await db.collection('fcm-tokens').findOne({'mobile':data.mobile});
     if(result){
-      db.collection('fcm-tokens').updateOne({'mobile':data.mobile},{$set:{token:data.token}}).then((res)=>{
+      db.collection('fcm-tokens').updateOne({'mobile':data.mobile},{$set:{token:data.token}}).then((result)=>{
         if(result){
           res.status(200).json({'status':true,'message':'Token updated'});
         }else{
@@ -609,7 +609,7 @@ app.post('/api/get-token',(req,res)=>{
     }else{
       const result = await db.collection('fcm-tokens').insertOne(data);
       if(result){
-        res.status(200).json({'status':true,'result':result});
+        res.status(200).json({'status':true,'result':'Token added'});
       }else{
         res.status(500).json({
           'status':false,
