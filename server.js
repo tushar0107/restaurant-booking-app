@@ -726,13 +726,14 @@ ws.on('connection', (socket,req)=>{
         receiver.send(msg.toString());
       }else if(receiver.readyState != WebSocket.OPEN){
         sender.send(JSON.stringify({status:'offline',user:data.receiver}));
+        sendNotification(mobile=data.receiver,title=data.name,body=data.msg);
       }
     }else{
       if(sender === socket && sender.readyState === WebSocket.OPEN){
         sender.send(JSON.stringify({status:'Not connected',user:data.receiver}));
       }
+      sendNotification(mobile=data.receiver,title=data.name,body=data.msg);
     }
-    sendNotification(mobile=data.receiver,title=data.sender,body=data.msg);
   });
 
   socket.on('error', (error)=>{
