@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+	<link rel="stylesheet" href="/style.css">
+	<title>Admin</title>
+</head>
+<body>
+	<main>
+		<header>
+			{{name}}
+		</header>
+		<section id="main-section">
+			<div id="restaurants">
+				<div id="menu-list">
+					{% for item in menuList %}
+					<form action="javascript:void(0)" id="form-{{item._id}}" class="menu-item" onsubmit="updateMenu('{{item._id}}')" enctype="multipart/form-data">
+						<label class="item-image-label" style="background-image: url(/upload-image.jpg);">
+							<img src="/{{item.food_image_url}}" class="item-image" id="{{item._id}}-food_image" alt="">
+							<input type="file" class="item-image-input" name="food_image_url" id="{{item._id}}-food_image_url" onchange="document.getElementById('{{item._id}}-food_image').src=window.URL.createObjectURL(this.files[0])" value="{{item.food_image_url}}">
+						</label>
+						<div class="item-details">
+							<input type="text" class="item-name" id="{{item._id}}-food_item" name="food_item" value="{{item.food_item}}" placeholder="Foom item name" required/>
+							<select name="type" class="item-type" id="{{item._id}}-type" value="{{item.type}}" required>
+								{% if item.type == 'veg' %}
+								<option value="veg" selected>Veg</option>
+								<option value="non-veg">Non-Veg</option>
+								{% elif item.type == 'non-veg' %}
+								<option value="veg">Veg</option>
+								<option value="non-veg" selected>Non-Veg</option>
+								{% else %}
+								<option value="veg">Veg</option>
+								<option value="non-veg">Non-Veg</option>
+								{% endif %}
+							</select>
+							<input type="text" class="item-price" id="{{item._id}}-price" name="price" value="{{item.price}}" placeholder="Price" required/>/-
+							<textarea class="item-desc" name="food_desc" id="{{item._id}}-food_desc" value="" placeholder="Food Description" required>{{item.food_desc}}</textarea>
+						</div>
+						<div class="item-actions">
+							<button type="button">
+								<i class="fa-regular fa-pen-to-square"></i>
+							</button>
+							<button type="submit" id="button-{{item._id}}">
+								<i class="fa-solid fa-arrow-up-from-bracket"></i>
+							</button>
+						</div>
+					</form>
+					{% endfor %}
+				</div>
+			</div>
+		</section>
+	</main>
+	<script>
+
+		function reflectImage(id){
+			var image = document.getElementById(id+'-food_image');
+			var imgUrl = document.getElementById(id+'-food_image_url').files[0];
+			image.src = window.URL.createObjectURL(imgUrl);
+		}
+
+		function updateMenu(itemId){
+			const form = document.getElementById('form-'+itemId);
+			const submit = document.getElementById('button-'+itemId);
+			const food_item = document.getElementById(itemId+'-food_item').value;
+			const type = document.getElementById(itemId+'-type').value;
+			const price = document.getElementById(itemId+'-price').value;
+			const food_desc= document.getElementById(itemId+'-food_desc').value;
+			const food_image_url = document.getElementById(itemId+'-food_image_url').files[0];
+			
+			submit.disabled=true;
+			var formData = new FormData();
+			
+			formData.append('_id',itemId);
+			formData.append('food_item',food_item);
+			formData.append('type',type);
+			formData.append('price',price);
+			formData.append('food_desc',food_desc);
+			formData.append('food_image_url',food_image_url);
+
+			const xhr = new XMLHttpRequest();
+			xhr.onreadystatechange = function(){
+				if(xhr.readyState == xhr.DONE){
+					if(xhr.status===200){
+						console.log(xhr.response);
+						submit.disabled=false;
+					}else{
+						console.log('error: ',xhr.response);
+						submit.disabled=false;
+					}
+				}
+			}
+			xhr.open('POST','/api/update-menu',true);
+			xhr.send(formData);
+
+		}
+
+		document.addEventListener('DOMContentLoaded',function(){
+			
+		});
+
+	</script>
+</body>
+</html>
