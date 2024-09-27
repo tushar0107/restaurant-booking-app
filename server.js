@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const http = require('http');
 const WebSocket = require('ws');
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
+const nunjucks = require('nunjucks');
 
 dotenv.config();
 
@@ -43,6 +44,8 @@ const app = express();
 const bodyParser = require('body-parser');
 
 
+app.set('view engine', 'html')
+
 var corsOptions = {
   methods: 'GET,POST',
   credentials: true,
@@ -52,8 +55,8 @@ app.use(cors(corsOptions));
 
 app.options('*', cors());
 
-app.use('/static', express.static('public'));
-app.use('/uploads', express.static('uploads'));
+app.use(express.static('public'));
+app.use(express.static('uploads'));
 
 app.use(express.json());
 app.use(bodyParser.urlencoded({extended:false}));
@@ -68,8 +71,10 @@ const storage = multer.diskStorage({
   },
   filename:function(req,file,cb){
     var food = req.body;
-    //rename the file to avoid conflict
-    cb(null,food.id+'-'+food.food_item.replaceAll(' ','-')+'.'+file.originalname.split('.')[1]);
+    if(file){ 
+      //rename the file to avoid conflict
+      cb(null,food.food_item.replaceAll(' ','-')+'-'+food._id+'.'+file.originalname.split('.')[1]);
+    }
   }
 });
 
@@ -88,6 +93,24 @@ app.get('/clock', function(req,res){
 
 app.get('/chat', function(req,res){
   res.sendFile(__dirname + '/public/chat.html');
+});
+
+app.get('/admin/:id',function(req,res){
+  const id = req.params.id;
+  var file = __dirname + '/public/admin.html';
+  nunjucks.configure(file, {autoescape: true,express: app});
+  restroDb.then(async(db)=>{
+    const result = await db.collection('menu').find({'restaurant_id':req.params.id}).toArray();
+    if(result){
+      res.render(file,{'name':'tushar','menuList':result});
+    }else{
+      res.status(500).json({
+        'status': false,
+        'message':'Unexpected error occured'
+      });
+    }
+  });
+
 });
 
 //user login api with form data (mobile and password)
@@ -235,7 +258,7 @@ app.post('/api/update-restaurant', (req,res)=>{
     location: data.location,
   }};
   restroDb.then(async(db)=>{
-    const result = await db.collection('restaurants').updateOne({'_id':data.user_id},data);
+    const result = await db.collection('restaurants').updateOne({'_id':new ObjectId(data.user_id)},data);
     if(result){
       res.status(200).json({
         'status':true,
@@ -255,6 +278,7 @@ app.get('/api/get-restaurant/:id',(req,res)=>{
   restroDb.then(async(db)=>{
     const result = await db.collection('restaurants').findOne({'_id':new ObjectId(req.params.id)});
     if(result){
+      console.log(result);
       res.status(200).json({
         'status':true,
         'result':result
@@ -371,7 +395,7 @@ app.post('/api/create-menu', upload.single('image'),(req,res)=>{
 app.get('/api/menu/:id',(req,res)=>{
   const id = req.params.id;
   restroDb.then(async(db)=>{
-    const result = await db.collection('menu').find({'_id':req.params.id}).toArray();
+    const result = await db.collection('menu').find({'restaurant_id':req.params.id}).toArray();
     if(result){
       res.status(200).json({
         'status':true,
@@ -387,7 +411,7 @@ app.get('/api/menu/:id',(req,res)=>{
 });
 
 //update menu item with provided menu id
-app.post('/api/update-menu', upload.single('image'),(req,res)=>{
+app.post('/api/update-menu', upload.single('food_image_url'),(req,res)=>{
   const formdata = req.body;
   const foodImage = req.file;
 
@@ -395,16 +419,22 @@ app.post('/api/update-menu', upload.single('image'),(req,res)=>{
     food_item: formdata.food_item,
     food_desc: formdata.food_desc,
     type: formdata.type,
-    price: formdata.price,
-    food_image_url:foodImage.path,
+    price: formdata.price
   }};
-
+  if(foodImage){
+    query.$set.food_image_url = foodImage?.filename;
+  }
   restroDb.then(async(db)=>{
-    const result = db.collection('menu').updateOne({'_id':formdata.id},query);
-    if(result){
+    const result = await db.collection('menu').updateOne({'_id':new ObjectId(formdata._id)},query);
+    if(result.modifiedCount > 0){
       res.status(200).json({
         'status':true,
         'message':'Menu item updated Successfully'
+      });
+    }else if(result.modifiedCount==0){
+      res.status(500).json({
+        'status': false,
+        'message':'No records updated'
       });
     }else{
       res.status(500).json({
