@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+    <style>
+        body{
+            margin: 0;
+        }
+        #clock-container{
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #clock{
+            position: absolute;
+            z-index: 1;
+            top: 50%;left: 50%;
+            transform: translate(-50%,-50%);
+            width: 200px;
+            height: 200px;
+            border: 2px solid rgb(0, 0, 0);
+            outline: 6px solid rgb(0, 0, 0);
+            border-radius: 50%;
+
+        }
+        #clock .numbers{
+            position: absolute;
+        }
+        #hands,
+        #hour-hand,
+        #minute-hand,
+        #second-hand{
+            position: absolute;
+            top: 50%;left: 50%;
+            transform: translate(-50%,-50%);
+        }
+        #hour-hand{
+            z-index: 6;
+            width: 4px;
+            height: 90px;
+            /* border: 1px solid blue; */
+        }
+        #hour-hand div{
+            width: 4px;
+        }
+        #minute-hand{
+            z-index: 7;
+            width: 4px;
+            height: 120px;
+            /* border: 1px solid #31972e; */
+        }
+        #minute-hand div{
+            width: 2px;
+        }
+        #second-hand{
+            z-index: 8;
+            width: 4px;
+            height: 160px;
+            /* border: 1px solid #be8632; */
+        }
+        #second-hand div{
+            width: 1px;
+        }
+        .clock-hands div{
+            height: 50%;
+            background-color: rgb(0, 0, 0);
+            margin: 10px auto 0;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- <header>
+        <div id="logo">LOGO</div>
+    </header>
+    <aside>
+        <nav>
+            <a href="#"></a>
+            <a href="#"></a>
+            <a href="#"></a>
+            <a href="#"></a>
+            <a href="#"></a>
+        </nav>
+    </aside> -->
+    <div id="clock-container">
+        <div id="clock">
+            <div id="num-12" class="numbers" style="top: 0;left: 90px;">12</div>
+            <div id="num-1" class="numbers" style="top: 10px;left: 140px;">1</div>
+            <div id="num-2" class="numbers" style="top: 45px;left: 170px;">2</div>
+            <div id="num-3" class="numbers" style="top: 90px;left: 190px;">3</div>
+            <div id="num-4" class="numbers" style="top: 140px;left: 170px;">4</div>
+            <div id="num-5" class="numbers" style="top: 170px;left: 140px;">5</div>
+            <div id="num-6" class="numbers" style="top: 180px;left:95px;">6</div>
+            <div id="num-7" class="numbers" style="top: 170px;left: 50px;">7</div>
+            <div id="num-8" class="numbers" style="top: 140px;left: 20px;">8</div>
+            <div id="num-9" class="numbers" style="top: 90px;left: 5px;">9</div>
+            <div id="num-10" class="numbers" style="top: 45px;left: 20px;">10</div>
+            <div id="num-11" class="numbers" style="top: 10px;left: 50px;">11</div>
+
+        </div>
+        <div id="hands">
+            <div id="hour-hand" class="clock-hands">
+                <div></div>
+            </div>
+            <div id="minute-hand" class="clock-hands">
+                <div></div>
+            </div>
+            <div id="second-hand" class="clock-hands">
+                <div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', ()=>{
+            const hourHand = document.getElementById('hour-hand');
+            const minuteHand = document.getElementById('minute-hand');
+            const secondHand = document.getElementById('second-hand');
+            
+            setInterval(() => {
+                var d = new Date();
+                var hours = d.getHours();
+                var minutes = d.getMinutes();
+                var seconds = d.getSeconds();
+
+
+                secondHand.style.transform = `translate(-50%,-50%) rotateZ(${(360/60)*seconds}deg)`;
+                minuteHand.style.transform = `translate(-50%,-50%) rotateZ(${(360/60)*minutes}deg)`;
+                hourHand.style.transform = `translate(-50%,-50%) rotateZ(${(360/12)*(hours%12)}deg)`;
+
+    
+            }, 1000);
+        });
+    </script>
+    <!-- <form action="http://127.0.0.1:8626/api/update-menu" method="post" enctype="multipart/form-data">
+        <input type="number" name="id" placeholder="menu id">
+        <input type="text" name="food_item" placeholder="name">
+        <select name="type" id="">
+            <option value="veg">veg</option>
+            <option value="non-veg">non-veg</option>
+        </select>
+        <input type="text" name="food_desc" placeholder="desc">
+        <input type="number" name="price">
+        <input type="file" name="image">
+        <input type="number" name="restaurant_id">
+        <button type="submit">Submit</button>
+    </form> -->
+
+</body>
+</html>

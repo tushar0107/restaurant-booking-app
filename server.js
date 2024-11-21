@@ -41,8 +41,6 @@ const restroDb = initDB();
 var port = process.env.PORT;
 
 const app = express();
-const bodyParser = require('body-parser');
-
 
 app.set('view engine', 'html')
 
@@ -57,10 +55,10 @@ app.options('*', cors());
 
 app.use(express.static('public'));
 app.use(express.static('uploads'));
+app.use(express.static('chat-files'));
 
 app.use(express.json());
-app.use(bodyParser.urlencoded({extended:false}));
-app.use(bodyParser.json());
+app.use(express.urlencoded({extended:true}));
 
 const server = http.createServer(app);
 
@@ -97,7 +95,7 @@ app.get('/chat', function(req,res){
 
 app.get('/admin/:id',function(req,res){
   const id = req.params.id;
-  var file = __dirname + '/public/admin.html';
+  var file = __dirname + '/public/restaurant.html';
   nunjucks.configure(file, {autoescape: true,express: app});
   restroDb.then(async(db)=>{
     const result = await db.collection('menu').find({'restaurant_id':req.params.id}).toArray();
@@ -117,10 +115,23 @@ app.get('/admin/:id',function(req,res){
 app.post("/api/login", (req, res) => {
   const mobile = req.body.mobile;
   const plainPassword = req.body.password;
+  console.log(req.body);
 
+  if(!mobile){
+    res.status(401).json({
+      'status':false,
+      'message':'Enter Mobile'
+    });
+  }else if(!plainPassword){
+    res.status(401).json({
+      'status':false,
+      'message':'Enter Password'
+    });
+  }else{
   restroDb.then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
+      console.log(result);
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
         res.status(200).json({
           'status':true,
@@ -139,14 +150,28 @@ app.post("/api/login", (req, res) => {
       });
     }
   });
+
+}
 });
 
 
 //register user with the values (first_name, last_name, address, mobile, email, user_type('customer'), password)
 app.post("/api/register-user", (req,res)=>{
   const data = req.body;
+
+  if(!data.mobile){
+    res.status(401).json({
+      'status':false,
+      'message':'Enter Mobile'
+    });
+  }else if(!data.password){
+    res.status(401).json({
+      'status':false,
+      'message':'Enter Password'
+    });
+  }else{
   //converts user's plain password to hashed password
-  const hashedPassword = bcrypt.hashSync(data.password,8);
+  const hashedPassword = bcrypt.hashSync(data?.password,8);
   data.password = hashedPassword;
 
   restroDb.then(async(db)=>{
@@ -155,12 +180,13 @@ app.post("/api/register-user", (req,res)=>{
       const result = await db.collection('users').insertOne(data);
       res.status(200).json({'status':true,'result':result});
     }else{
-      res.result(200).json({
+      res.status(200).json({
         'status':false,
         'message':'Mobile number already exists'
       });
     }
   });
+}
 });
 
 // update user info required mobile and password
@@ -258,7 +284,7 @@ app.post('/api/update-restaurant', (req,res)=>{
     location: data.location,
   }};
   restroDb.then(async(db)=>{
-    const result = await db.collection('restaurants').updateOne({'_id':new ObjectId(data.user_id)},data);
+    const result = await db.collection('restaurants').updateOne({'_id':new ObjectId(data.user_id)},query);
     if(result){
       res.status(200).json({
         'status':true,
@@ -278,7 +304,6 @@ app.get('/api/get-restaurant/:id',(req,res)=>{
   restroDb.then(async(db)=>{
     const result = await db.collection('restaurants').findOne({'_id':new ObjectId(req.params.id)});
     if(result){
-      console.log(result);
       res.status(200).json({
         'status':true,
         'result':result
@@ -733,6 +758,12 @@ app.post('/api/add-message',(req,res)=>{
 });
 
 
+app.get('*',(req,res)=>{
+  res.send('<h2>Ohh!! The page you are looking for is not found on our server, please check the URL.');
+});
+
+const fs = require('fs');
+const path = require('path');
 
 const ws = new WebSocket.Server({server:server});
 
@@ -746,6 +777,18 @@ ws.on('connection', (socket,req)=>{
     const data = JSON.parse(msg.toString());
     const receiver = users[data.receiver];
     const sender = users[data.sender];
+    if(data.media){
+        const {blob, name, type} = data.media;
+        const buffer = Buffer.from(blob.split('base64,')[1],'base64');
+        const savePath = path.join(__dirname,'chat-files',name);
+        fs.writeFile(savePath,buffer,(err)=>{
+          if(err){
+            console.log(`Error saving file ${name}:`, err.message);
+          }else{
+            delete(data.media.blob);
+          }
+        });
+    }
 
     chatDB.then(async(db)=>{
       await db.collection('messages').insertOne(data);
@@ -767,10 +810,12 @@ ws.on('connection', (socket,req)=>{
   });
 
   socket.on('error', (error)=>{
+    socket.resume();
     console.log('Websocket error: ',error);
   });
 
   socket.on('close', (event)=>{
+    socket.resume();
     console.log('websocket closed: ',event);
   });
 

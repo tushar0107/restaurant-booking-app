@@ -1,152 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home</title>
-    <style>
-        body{
-            margin: 0;
-        }
-        #clock-container{
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-        }
-        #clock{
-            position: absolute;
-            z-index: 1;
-            top: 50%;left: 50%;
-            transform: translate(-50%,-50%);
-            width: 200px;
-            height: 200px;
-            border: 2px solid rgb(0, 0, 0);
-            outline: 6px solid rgb(0, 0, 0);
-            border-radius: 50%;
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+	<title>Home</title>
+	<style>
+		body{
+			margin: 0;
+		}
+		#login-container{
+			width: 100vw;
+			height: 100vh;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+		}
+		#login-modal{
+			width: min(700px,80%);	
+			margin: 0 auto;
+			padding: 1rem;
+			box-shadow: 0 0 8px 0 #111111aa;
+			border-radius: 1rem;
+		}
+		form#login-form .input-field{
+			display: flex;
+			justify-content: stretch;
+			align-items: stretch;
+			gap: 1rem;
+			height: 3rem;
+			margin: 1rem auto;
+		}
+		.input-field input,.input-field button{
+			padding: 1rem 0.5rem;
+			flex: 1 1 100%;
+		}
+		.input-field #show-btn{
+			max-width: 3rem;
+			aspect-ratio: 1;
+		}
+		.input-field button#submit-btn{
+			display: block;
+			width: 100%;
+			padding: .8rem 1rem;
+			border-radius: 4px;
 
-        }
-        #clock .numbers{
-            position: absolute;
-        }
-        #hands,
-        #hour-hand,
-        #minute-hand,
-        #second-hand{
-            position: absolute;
-            top: 50%;left: 50%;
-            transform: translate(-50%,-50%);
-        }
-        #hour-hand{
-            z-index: 6;
-            width: 4px;
-            height: 90px;
-            /* border: 1px solid blue; */
-        }
-        #hour-hand div{
-            width: 4px;
-        }
-        #minute-hand{
-            z-index: 7;
-            width: 4px;
-            height: 120px;
-            /* border: 1px solid #31972e; */
-        }
-        #minute-hand div{
-            width: 2px;
-        }
-        #second-hand{
-            z-index: 8;
-            width: 4px;
-            height: 160px;
-            /* border: 1px solid #be8632; */
-        }
-        #second-hand div{
-            width: 1px;
-        }
-        .clock-hands div{
-            height: 50%;
-            background-color: rgb(0, 0, 0);
-            margin: 10px auto 0;
-            border-radius: 10px;
-        }
-    </style>
+		}
+	</style>
 </head>
 <body>
-    <!-- <header>
-        <div id="logo">LOGO</div>
-    </header>
-    <aside>
-        <nav>
-            <a href="#"></a>
-            <a href="#"></a>
-            <a href="#"></a>
-            <a href="#"></a>
-            <a href="#"></a>
-        </nav>
-    </aside> -->
-    <div id="clock-container">
-        <div id="clock">
-            <div id="num-12" class="numbers" style="top: 0;left: 90px;">12</div>
-            <div id="num-1" class="numbers" style="top: 10px;left: 140px;">1</div>
-            <div id="num-2" class="numbers" style="top: 45px;left: 170px;">2</div>
-            <div id="num-3" class="numbers" style="top: 90px;left: 190px;">3</div>
-            <div id="num-4" class="numbers" style="top: 140px;left: 170px;">4</div>
-            <div id="num-5" class="numbers" style="top: 170px;left: 140px;">5</div>
-            <div id="num-6" class="numbers" style="top: 180px;left:95px;">6</div>
-            <div id="num-7" class="numbers" style="top: 170px;left: 50px;">7</div>
-            <div id="num-8" class="numbers" style="top: 140px;left: 20px;">8</div>
-            <div id="num-9" class="numbers" style="top: 90px;left: 5px;">9</div>
-            <div id="num-10" class="numbers" style="top: 45px;left: 20px;">10</div>
-            <div id="num-11" class="numbers" style="top: 10px;left: 50px;">11</div>
-
-        </div>
-        <div id="hands">
-            <div id="hour-hand" class="clock-hands">
-                <div></div>
-            </div>
-            <div id="minute-hand" class="clock-hands">
-                <div></div>
-            </div>
-            <div id="second-hand" class="clock-hands">
-                <div></div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', ()=>{
-            const hourHand = document.getElementById('hour-hand');
-            const minuteHand = document.getElementById('minute-hand');
-            const secondHand = document.getElementById('second-hand');
-            
-            setInterval(() => {
-                var d = new Date();
-                var hours = d.getHours();
-                var minutes = d.getMinutes();
-                var seconds = d.getSeconds();
-
-
-                secondHand.style.transform = `translate(-50%,-50%) rotateZ(${(360/60)*seconds}deg)`;
-                minuteHand.style.transform = `translate(-50%,-50%) rotateZ(${(360/60)*minutes}deg)`;
-                hourHand.style.transform = `translate(-50%,-50%) rotateZ(${(360/12)*(hours%12)}deg)`;
-
-    
-            }, 1000);
-        });
-    </script>
-    <!-- <form action="http://127.0.0.1:8626/api/update-menu" method="post" enctype="multipart/form-data">
-        <input type="number" name="id" placeholder="menu id">
-        <input type="text" name="food_item" placeholder="name">
-        <select name="type" id="">
-            <option value="veg">veg</option>
-            <option value="non-veg">non-veg</option>
-        </select>
-        <input type="text" name="food_desc" placeholder="desc">
-        <input type="number" name="price">
-        <input type="file" name="image">
-        <input type="number" name="restaurant_id">
-        <button type="submit">Submit</button>
-    </form> -->
-
+	<main>
+		<div id="login-container">
+			<div id="login-modal">
+				<h4>Login as owner</h4>
+				<form action="javascript:void(0)" onsubmit="login()" id="login-form" enctype="text/plain">
+					<div class="input-field">
+						<input type="number" name="mobile" id="mobile" placeholder="Enter Mobile"/>
+					</div>
+					<div class="input-field">
+						<input type="password" name="password" id="password" placeholder="Enter Password"/>
+						<button type="button" id="show-btn">
+							<i class="fa-regular fa-eye"></i>
+						</button>
+					</div>
+					<div class="input-field">
+						<button type="submit" id="submit-btn">Login</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</main>
+	<script>
+		function login(){
+			const submit = document.getElementById('submit-btn');
+			const mobile = document.getElementById('mobile').value;
+			const password = document.getElementById('password').value;
+			const form = document.getElementById('login-form');
+			
+			const formData = new FormData();
+			formData.append('mobile',encodeURIComponent(mobile));
+			formData.append('password',encodeURIComponent(password));
+			formData.forEach((k,v)=>console.log(k,v));
+			const xhr = new XMLHttpRequest();
+			xhr.onreadystatechange = function(){
+				if(xhr.readyState == xhr.DONE){
+					console.log(xhr.response);
+				}
+			}
+			xhr.open('POST','/api/login',true);
+			xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+			xhr.send(formData);
+		}
+	</script>
 </body>
 </html>
