@@ -558,6 +558,9 @@ const connection = async()=>{
 const chatDB = connection();
 
 
+const fs = require('fs');
+const path = require('path');
+
 var firebase = require("firebase-admin");
 
 var serviceAccount = require(process.env.SERVICE_ACCOUNT);
@@ -572,16 +575,37 @@ async function sendNotification(mobile, title, body){
     return result;
   }).then(async(result)=>{
     if(result){
-      await firebase.messaging().send({
-        token:result.token,
-        notification:{
-          title:title,
-          body:body
-        }
-      });
+      try{
+        await firebase.messaging().send({
+          token:result.token,
+          notification:{
+            title:title,
+            body:body
+          }
+        });
+      }catch{
+        (error)=>console.log('firebase error: ',error);
+      }
     }
   });
 }
+
+
+//file storage
+const chatStorage = multer.diskStorage({
+  destination: function(req,file,cb){
+    cb(null,'chat-files/');
+  },
+  filename:function(req,files,cb){
+    console.log('storage',files);
+    if(files){
+      //rename the file to avoid conflict
+      cb(null,files.originalname);
+    }
+  }
+});
+
+const chatFiles = multer({storage: chatStorage,limits: { fieldSize: 25 * 1024 * 1024 }});
 
 app.post("/api/chat-register", (req,res)=>{
   const data = req.body;
@@ -729,6 +753,7 @@ app.post('/api/get-messages',(req,res)=>{
           },
         ],
       }).sort({"sent": -1})
+      .limit(20)
       .toArray();
     if(result){
       res.status(200).json({
@@ -744,6 +769,19 @@ app.post('/api/get-messages',(req,res)=>{
   });
 });
 
+app.get('/api/delete-messages/:sender/:receiver',(req,res)=>{
+  const {sender,receiver} = req.params;
+  chatDB.then(async(db)=>{
+    const result = await db.collection('messages').deleteMany({$or:[{$and:[{'sender':sender},{'receiver':receiver}]},{$and:[{'sender':receiver},{'receiver':sender}]}]})
+    if(result.acknowledged){
+      res.status(200).json({
+        'status':true,
+        'result':result
+      });
+    }
+  }).catch(e=>{console.log(e.message)});
+});
+
 app.post('/api/add-message',(req,res)=>{
   const message = req.body.message;
   chatDB.then(async(db)=>{
@@ -756,14 +794,34 @@ app.post('/api/add-message',(req,res)=>{
     }
   });
 });
+//,chatFiles.array('media')
+app.post('/api/send-media',chatFiles.array('media'),(req,res,err)=>{
+  try{
+    const media = JSON.parse(req.body.media);
+    if(media && media.length){
+      media.forEach(file=>{
+        const filepath = path.join(__dirname,'chat-files',file.name);
+        fs.writeFileSync(filepath,file.blob.split(';base64,').pop(),'base64');
+      });
+    }
+    res.status(200).json({
+      'status':true,
+      'message':'file saved'
+    });
+
+  }catch{e=>{
+    res.status(400).json({
+      'status':false,
+      'message':'Error in saving the file',
+      'error':e.message
+    });
+  }}
+});
 
 
 app.get('*',(req,res)=>{
   res.send('<h2>Ohh!! The page you are looking for is not found on our server, please check the URL.');
 });
-
-const fs = require('fs');
-const path = require('path');
 
 const ws = new WebSocket.Server({server:server});
 
@@ -777,45 +835,39 @@ ws.on('connection', (socket,req)=>{
     const data = JSON.parse(msg.toString());
     const receiver = users[data.receiver];
     const sender = users[data.sender];
-    if(data.media){
-        const {blob, name, type} = data.media;
-        const buffer = Buffer.from(blob.split('base64,')[1],'base64');
-        const savePath = path.join(__dirname,'chat-files',name);
-        fs.writeFile(savePath,buffer,(err)=>{
-          if(err){
-            console.log(`Error saving file ${name}:`, err.message);
-          }else{
-            delete(data.media.blob);
-          }
-        });
-    }
-
-    chatDB.then(async(db)=>{
-      await db.collection('messages').insertOne(data);
-    });
-
-    if(receiver){
-      if(receiver.readyState === WebSocket.OPEN){
-        receiver.send(msg.toString());
-      }else if(receiver.readyState != WebSocket.OPEN){
-        sender.send(JSON.stringify({status:'offline',user:data.receiver}));
-        sendNotification(mobile=data.receiver,title=data.name,body=data.msg);
+    if(data.check=='ping'){
+      if(receiver?.readyState==WebSocket.OPEN){
+        sender.send(JSON.stringify({status:'Connected',user:data.receiver,ping:true}));
+      }else{
+        sender.send(JSON.stringify({status:'offline',user:data.receiver,ping:false}));
       }
     }else{
-      if(sender === socket && sender.readyState === WebSocket.OPEN){
-        sender.send(JSON.stringify({status:'Not connected',user:data.receiver}));
+      
+      chatDB.then(async(db)=>{
+        await db.collection('messages').insertOne(data);
+      });
+
+      if(receiver){
+        if(receiver.readyState === WebSocket.OPEN){
+          receiver.send(msg.toString());
+        }else if(receiver.readyState != WebSocket.OPEN){
+          sender.send(JSON.stringify({status:'offline',user:data.receiver,ping:false}));
+          sendNotification(mobile=data.receiver,title=data.name,body=data.msg);
+        }
+      }else{
+        if(sender === socket && sender.readyState === WebSocket.OPEN){
+          sender.send(JSON.stringify({status:'Connected',user:data.receiver,ping:false}));
+        }
       }
-      sendNotification(mobile=data.receiver,title=data.name,body=data.msg);
     }
   });
+  
 
   socket.on('error', (error)=>{
-    socket.resume();
     console.log('Websocket error: ',error);
   });
 
   socket.on('close', (event)=>{
-    socket.resume();
     console.log('websocket closed: ',event);
   });
 
