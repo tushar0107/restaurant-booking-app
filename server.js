@@ -115,7 +115,6 @@ app.get('/admin/:id',function(req,res){
 app.post("/api/login", (req, res) => {
   const mobile = req.body.mobile;
   const plainPassword = req.body.password;
-  console.log(req.body);
 
   if(!mobile){
     res.status(401).json({
@@ -131,12 +130,20 @@ app.post("/api/login", (req, res) => {
   restroDb.then(async(db)=>{
     const result = await db.collection('users').findOne({'mobile':mobile});
     if(result){
-      console.log(result);
       if(bcrypt.compareSync(plainPassword,result.password)){//compare user password with bcrypt password
-        res.status(200).json({
-          'status':true,
-          'user':result,
-        });
+        if(result.user_type=='owner'){
+          const restaurant = await db.collection('restaurants').find({'owner':result._id.toHexString()}).toArray();
+          res.status(200).json({
+            'status':true,
+            'user':result,
+            'restaurant':restaurant
+          });
+        }else{
+          res.status(200).json({
+            'status':true,
+            'user':result,
+          });
+        }
       }else{ // for incorrect password
         res.status(401).json({
           'status':false,
@@ -542,9 +549,9 @@ app.post('/api/add-review', (req,res)=>{
 
 
 
-// darzo projects apis below
+// darzo projects apis below //
 
-
+// new connection to chat database
 const connection = async()=>{
   try {
     await client.connect();
@@ -555,6 +562,7 @@ const connection = async()=>{
   }
 };
 
+// initialize connection to chat database
 const chatDB = connection();
 
 
@@ -563,12 +571,15 @@ const path = require('path');
 
 var firebase = require("firebase-admin");
 
+//firebase utility
 var serviceAccount = require(process.env.SERVICE_ACCOUNT);
 
+// initialize firebase
 firebase.initializeApp({
   credential: firebase.credential.cert(serviceAccount)
 });
 
+// send notification to the users on mobile of they appear offline by the websocket
 async function sendNotification(mobile, title, body){
   await chatDB.then(async(db)=>{
     const result = await db.collection('fcm-tokens').findOne({'mobile':mobile});
@@ -607,6 +618,7 @@ const chatStorage = multer.diskStorage({
 
 const chatFiles = multer({storage: chatStorage,limits: { fieldSize: 25 * 1024 * 1024 }});
 
+// to register a new user (form data: first_name,last_name,email,mobile,password)
 app.post("/api/chat-register", (req,res)=>{
   const data = req.body;
   //converts user's plain password to hashed password
@@ -655,6 +667,7 @@ app.post("/api/chat-login", (req, res) => {
   });
 });
 
+// to fetch all users in the database
 app.get('/api/chat-users',(req,res)=>{
   chatDB.then(async(db)=>{
     const result = await db.collection('users').find().toArray();
@@ -672,6 +685,7 @@ app.get('/api/chat-users',(req,res)=>{
   });
 });
 
+// store fcm token in the database
 app.post('/api/get-token',(req,res)=>{
   const data = req.body;
   chatDB.then(async(db)=>{
@@ -698,6 +712,7 @@ app.post('/api/get-token',(req,res)=>{
   });
 });
 
+// get messages between two users
 app.get('/api/get-messages/:sender/:receiver',(req,res)=>{
   const sender = req.params.sender;
   const receiver = req.params.receiver;
@@ -733,6 +748,7 @@ app.get('/api/get-messages/:sender/:receiver',(req,res)=>{
   });
 });
 
+// fetch messages betwen two users (form data: sender and receiver)
 app.post('/api/get-messages',(req,res)=>{
   const sender = req.body.sender;
   const receiver = req.body.receiver;
@@ -769,6 +785,7 @@ app.post('/api/get-messages',(req,res)=>{
   });
 });
 
+// delete all messages between two users
 app.get('/api/delete-messages/:sender/:receiver',(req,res)=>{
   const {sender,receiver} = req.params;
   chatDB.then(async(db)=>{
@@ -782,6 +799,7 @@ app.get('/api/delete-messages/:sender/:receiver',(req,res)=>{
   }).catch(e=>{console.log(e.message)});
 });
 
+// add a message to the database
 app.post('/api/add-message',(req,res)=>{
   const message = req.body.message;
   chatDB.then(async(db)=>{
@@ -795,7 +813,7 @@ app.post('/api/add-message',(req,res)=>{
   });
 });
 //,chatFiles.array('media')
-app.post('/api/send-media',chatFiles.array('media'),(req,res,err)=>{
+app.post('/api/send-media',chatFiles.array('media'),(req,res)=>{
   try{
     const media = JSON.parse(req.body.media);
     if(media && media.length){
