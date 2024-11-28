@@ -7,6 +7,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const {MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
 const nunjucks = require('nunjucks');
+const serverless = require('serverless-http');
 
 dotenv.config();
 
@@ -59,6 +60,8 @@ app.use(express.static('chat-files'));
 
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
+app.use('/.netlify/functions/app',express.Router());
+module.exports.handler = serverless(app);
 
 const server = http.createServer(app);
 

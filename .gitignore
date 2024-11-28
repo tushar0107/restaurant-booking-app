@@ -49,6 +49,7 @@ build/Release
 # Dependency directories
 node_modules/
 
+.netlify
 # Optional npm cache directory
 .npm
 
@@ -68,3 +69,7 @@ node_modules/
 .env
 
 chat-files/
+.vercel
+
+# Local Netlify folder
+.netlify
